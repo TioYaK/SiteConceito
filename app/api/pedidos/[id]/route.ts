@@ -8,7 +8,7 @@ export async function PATCH(
   try {
     const { id } = params;
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
     if (!db.pedidos) db.pedidos = [];
 
     const index = db.pedidos.findIndex(p => p.id === id);
@@ -43,7 +43,7 @@ export async function PATCH(
       Object.assign(pedido, body);
     }
 
-    saveDb(db);
+    await saveDb(db);
     return NextResponse.json(pedido);
   } catch (error) {
     return NextResponse.json({ error: 'Erro ao atualizar pedido' }, { status: 500 });

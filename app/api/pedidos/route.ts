@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, Pedido, TransacaoCaixa } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   return NextResponse.json(db.pedidos || []);
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
     if (!db.pedidos) db.pedidos = [];
 
     const valorItens = Number(body.valorItens || 0);
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     db.pedidos.unshift(novoPedido);
-    saveDb(db);
+    await saveDb(db);
 
     return NextResponse.json(novoPedido, { status: 201 });
   } catch (error) {

@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, Cliente } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   return NextResponse.json(db.clientes || []);
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
     if (!db.clientes) db.clientes = [];
 
     // Se for edição
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       const idx = db.clientes.findIndex(c => c.id === body.id);
       if (idx !== -1) {
         db.clientes[idx] = { ...db.clientes[idx], ...body };
-        saveDb(db);
+        await saveDb(db);
         return NextResponse.json(db.clientes[idx]);
       }
     }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     };
 
     db.clientes.push(novoCliente);
-    saveDb(db);
+    await saveDb(db);
     return NextResponse.json(novoCliente, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Erro ao salvar cliente' }, { status: 500 });

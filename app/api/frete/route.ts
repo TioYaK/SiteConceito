@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'CEP inválido. Deve conter 8 dígitos.' }, { status: 400 });
     }
 
-    const db = getDb();
+    const db = await getDb();
     const configFrete = db.configuracoes.frete || {
       taxaMotoboy: 15.00,
       cepOrigem: "01310-100",

@@ -8,7 +8,7 @@ export async function PATCH(
   try {
     const { id } = params;
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     const index = db.agendamentos.findIndex(a => a.id === id);
     if (index === -1) {
@@ -66,7 +66,7 @@ export async function PATCH(
       Object.assign(agendamento, body);
     }
 
-    saveDb(db);
+    await saveDb(db);
     return NextResponse.json(agendamento);
   } catch (error) {
     return NextResponse.json({ error: 'Erro ao atualizar agendamento' }, { status: 500 });

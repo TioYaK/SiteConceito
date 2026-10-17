@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, ItemEstoque } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   return NextResponse.json(db.estoque);
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     // Se for ajuste de quantidade
     if (body.action === 'ajustar_quantidade' && body.id) {
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       if (!item) return NextResponse.json({ error: 'Item não encontrado' }, { status: 404 });
       
       item.quantidade = Math.max(0, item.quantidade + Number(body.delta || 0));
-      saveDb(db);
+      await saveDb(db);
       return NextResponse.json(item);
     }
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     };
 
     db.estoque.push(novoItem);
-    saveDb(db);
+    await saveDb(db);
     return NextResponse.json(novoItem, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Erro no estoque' }, { status: 500 });

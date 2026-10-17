@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, TransacaoCaixa } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   
   const totalEntradas = db.caixa
     .filter(t => t.tipo === 'entrada')
@@ -27,7 +27,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     const novaTransacao: TransacaoCaixa = {
       id: `tx-${Date.now()}`,
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     };
 
     db.caixa.push(novaTransacao);
-    saveDb(db);
+    await saveDb(db);
 
     return NextResponse.json(novaTransacao, { status: 201 });
   } catch (error) {

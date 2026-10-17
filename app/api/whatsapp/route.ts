@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getDb, saveDb, Agendamento, Servico, Pedido } from '@/lib/store';
+import { getDb, saveDb, Agendamento, Servico, Pedido, AppData } from '@/lib/store';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 async function gerarRespostaGemini(
   mensagem: string,
   clienteNome: string,
-  db: ReturnType<typeof getDb>,
+  db: AppData,
   apiKey: string,
   modeloNome: string = 'gemini-3.5-flash-lite'
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
@@ -230,7 +230,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
       prod.quantidade = Math.max(0, prod.quantidade - qtd);
 
       db.pedidos.unshift(pedidoCriado);
-      saveDb(db);
+      await saveDb(db);
 
       if (!respostaFinal.includes(pixCode)) {
         respostaFinal += `\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\``;
@@ -257,7 +257,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
         if (cepIdentificado) clienteExistente.cep = cepIdentificado;
         if (agendamentoCriado) clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
         if (pedidoCriado) clienteExistente.totalGasto = (clienteExistente.totalGasto || 0) + pedidoCriado.valorTotal;
-        saveDb(db);
+        await saveDb(db);
       } else if (nomeIdentificado && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado)) {
         db.clientes.unshift({
           id: `cli-${Date.now()}`,
@@ -271,7 +271,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
           totalGasto: agendamentoCriado ? agendamentoCriado.valorTotal : (pedidoCriado ? pedidoCriado.valorTotal : 0),
           observacoes: `Cadastrada via WhatsApp com Manu (IA). Aniversário: ${dataNascIdentificada || 'Pendente'}`
         });
-        saveDb(db);
+        await saveDb(db);
       }
     }
 
@@ -302,7 +302,7 @@ function formatarReal(valor: number): string {
 function gerarRespostaRecepcionista(
   mensagem: string,
   clienteNome: string,
-  db: ReturnType<typeof getDb>
+  db: AppData
 ): { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
@@ -569,7 +569,7 @@ function gerarRespostaRecepcionista(
 }
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   const apiKey = db.configuracoes.geminiApiKey || process.env.GEMINI_API_KEY || "";
   return NextResponse.json({
     status: db.configuracoes.statusWhatsApp,
@@ -589,11 +589,11 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     if (body.action === 'toggle_ia') {
       db.configuracoes.iaAtiva = !db.configuracoes.iaAtiva;
-      saveDb(db);
+      await saveDb(db);
       return NextResponse.json({ iaAtiva: db.configuracoes.iaAtiva });
     }
 
@@ -606,7 +606,7 @@ export async function POST(request: Request) {
       if (body.frete) db.configuracoes.frete = { ...db.configuracoes.frete, ...body.frete };
       if (body.geminiApiKey !== undefined) db.configuracoes.geminiApiKey = body.geminiApiKey;
       if (body.modeloGemini !== undefined) db.configuracoes.modeloGemini = body.modeloGemini;
-      saveDb(db);
+      await saveDb(db);
       return NextResponse.json(db.configuracoes);
     }
 

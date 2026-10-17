@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { supabase } from './supabase';
 
 export interface Servico {
   id: string;
@@ -602,7 +603,7 @@ const INITIAL_DATA: AppData = {
   ]
 };
 
-export function getDb(): AppData {
+export function getDbSync(): AppData {
   try {
     if (!fs.existsSync(DATA_FILE)) {
       const dir = path.dirname(DATA_FILE);
@@ -624,16 +625,16 @@ export function getDb(): AppData {
       modified = true;
     }
     if (modified) {
-      saveDb(data);
+      saveDbSync(data);
     }
     return data;
   } catch (error) {
-    console.error("Erro ao ler banco de dados:", error);
+    console.error("Erro ao ler banco de dados local:", error);
     return INITIAL_DATA;
   }
 }
 
-export function saveDb(data: AppData): void {
+export function saveDbSync(data: AppData): void {
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) {
@@ -641,6 +642,57 @@ export function saveDb(data: AppData): void {
     }
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (error) {
-    console.error("Erro ao salvar banco de dados:", error);
+    console.error("Erro ao salvar banco de dados local:", error);
   }
 }
+
+export async function getDb(): Promise<AppData> {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('app_data')
+        .select('data')
+        .eq('id', 'studio_data')
+        .maybeSingle();
+
+      if (data && data.data) {
+        return data.data as AppData;
+      }
+
+      // Se a linha ainda não existir no Supabase, semeia com os dados locais
+      const seedData = getDbSync();
+      await supabase
+        .from('app_data')
+        .upsert({ id: 'studio_data', data: seedData });
+      return seedData;
+    } catch (err) {
+      console.error("Erro ao consultar Supabase, utilizando dados locais:", err);
+    }
+  }
+
+  return getDbSync();
+}
+
+export async function saveDb(data: AppData): Promise<void> {
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('app_data')
+        .upsert({
+          id: 'studio_data',
+          data,
+          updated_at: new Date().toISOString()
+        });
+
+      if (!error) {
+        return;
+      }
+      console.error("Erro ao persistir no Supabase:", error);
+    } catch (err) {
+      console.error("Erro de conexão ao salvar no Supabase:", err);
+    }
+  }
+
+  saveDbSync(data);
+}
+

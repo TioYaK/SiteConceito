@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   
   // Apenas dados públicos seguros (sem expor credenciais privadas, chaves de API ou segredos)
   const infoPublica = {

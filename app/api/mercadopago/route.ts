@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   const token = db.configuracoes.mercadoPagoAccessToken || process.env.MERCADO_PAGO_ACCESS_TOKEN || "";
   return NextResponse.json({
     ativo: db.configuracoes.mercadoPagoAtivo || false,
@@ -14,7 +14,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     // 1. TESTAR CREDENCIAIS DO MERCADO PAGO
     if (body.action === 'testar_credenciais') {
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       if (body.mercadoPagoAccessToken !== undefined) db.configuracoes.mercadoPagoAccessToken = body.mercadoPagoAccessToken.trim();
       if (body.mercadoPagoPublicKey !== undefined) db.configuracoes.mercadoPagoPublicKey = body.mercadoPagoPublicKey.trim();
       if (body.mercadoPagoAtivo !== undefined) db.configuracoes.mercadoPagoAtivo = Boolean(body.mercadoPagoAtivo);
-      saveDb(db);
+      await saveDb(db);
       return NextResponse.json({ sucesso: true, configuracoes: db.configuracoes });
     }
 

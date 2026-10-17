@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, Agendamento, TransacaoCaixa } from '@/lib/store';
 
 export async function GET() {
-  const db = getDb();
+  const db = await getDb();
   return NextResponse.json(db.agendamentos);
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const db = getDb();
+    const db = await getDb();
 
     const servico = db.servicos.find(s => s.id === body.servicoId);
     const valorTotal = servico ? servico.precoTotal : Number(body.valorTotal || 0);
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       db.caixa.push(transacao);
     }
 
-    saveDb(db);
+    await saveDb(db);
     return NextResponse.json(novoAgendamento, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: 'Erro ao criar agendamento' }, { status: 500 });
