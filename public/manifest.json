@@ -1,0 +1,17 @@
+{
+  "name": "Recepcionista Pro - Agenda & Gestão",
+  "short_name": "Agenda Pro",
+  "description": "Aplicativo de agendamento, recepção automática e gestão de caixa para pequenos negócios.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

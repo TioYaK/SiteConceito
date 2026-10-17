@@ -1,0 +1,692 @@
+import { NextResponse } from 'next/server';
+import { getDb, saveDb, Agendamento, Servico, Pedido } from '@/lib/store';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+async function gerarRespostaGemini(
+  mensagem: string,
+  clienteNome: string,
+  db: ReturnType<typeof getDb>,
+  apiKey: string,
+  modeloNome: string = 'gemini-3.5-flash-lite'
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelosParaTentar = Array.from(new Set([
+    modeloNome,
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite'
+  ]));
+
+    const hojeStr = new Date().toISOString().split('T')[0];
+    const dAmanha = new Date();
+    dAmanha.setDate(dAmanha.getDate() + 1);
+    const amanhaStr = dAmanha.toISOString().split('T')[0];
+
+    const servicos = db.servicos.filter(s => s.ativo);
+    const produtos = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
+    const agendamentosOcupadosHoje = (db.agendamentos || [])
+      .filter(a => a.data === hojeStr && a.status !== 'cancelado')
+      .map(a => `${a.horario} (${a.servicoNome})`);
+
+    const agendamentosOcupadosAmanha = (db.agendamentos || [])
+      .filter(a => a.data === amanhaStr && a.status !== 'cancelado')
+      .map(a => `${a.horario} (${a.servicoNome})`);
+
+    const frete = db.configuracoes.frete || {
+      taxaMotoboy: 15.0,
+      cepOrigem: "01310-100",
+      cidadeOrigem: "São Paulo",
+      estadoOrigem: "SP",
+      freteGratisAcimaDe: 150.0
+    };
+
+    const promptSistema = `
+Você é a Manu, recepcionista virtual inteligente, simpática e concierge de beleza do '${db.configuracoes.nomeEmpresa}'.
+Data de hoje: ${hojeStr}. Horário de atendimento do Studio: das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}.
+
+HORÁRIOS JÁ OCUPADOS:
+- Hoje (${hojeStr}): ${agendamentosOcupadosHoje.length > 0 ? agendamentosOcupadosHoje.join(', ') : 'Todos os horários livres'}
+- Amanhã (${amanhaStr}): ${agendamentosOcupadosAmanha.length > 0 ? agendamentosOcupadosAmanha.join(', ') : 'Todos os horários livres'}
+
+PERSONALIDADE & TOM DE VOZ:
+- Extremamente simpática, acolhedora, humana e elegante.
+- Use emojis suaves e bonitos (✨, 🌸, 💖, 🗓️, 🛵, 🛍️).
+- Fale em português brasileiro de forma natural, ágil e prestativa.
+- Trate sempre a cliente pelo nome (${clienteNome}).
+
+SERVIÇOS OFERECIDOS (CATÁLOGO FECHADO - NUNCA INVENTE OUTROS):
+${JSON.stringify(servicos.map(s => ({ id: s.id, nome: s.nome, preco: s.precoTotal, sinal: s.valorSinal, duracao: `${s.duracaoMinutos} min`, descricao: s.descricao })))}
+
+PRODUTOS HOME-CARE DISPONÍVEIS PARA VENDA (APRESENTE COM CARINHO E EXPLIQUE OS BENEFÍCIOS):
+${JSON.stringify(produtos.map(p => ({
+  id: p.id,
+  nome: p.nome,
+  preco: p.precoVenda,
+  categoria: p.categoria || 'Cuidados Diários',
+  descricao: p.descricao || '',
+  beneficios: p.beneficios || '',
+  modoUso: p.modoUso || '',
+  estoque: p.quantidade
+})))}
+
+FORMAS DE PAGAMENTO ACEITAS:
+- PIX à vista (chave oficial: ${db.configuracoes.chavePix})
+- Cartão de Crédito em até 12x (online via Mercado Pago ou na maquininha do studio no dia do atendimento)
+
+REGRAS DE ENTREGA E FRETE:
+- Retirada no Studio: GRÁTIS (Rua Augusta, pronta em 1 hora).
+- Motoboy Express: R$ ${frete.taxaMotoboy.toFixed(2)} (mesmo dia para ${frete.cidadeOrigem}), ou GRÁTIS em compras acima de R$ ${frete.freteGratisAcimaDe.toFixed(2)}.
+- Sedex / PAC dos Correios para outras cidades/estados.
+
+CHAVE PIX DO STUDIO:
+- Chave: ${db.configuracoes.chavePix} (${db.configuracoes.tipoChavePix})
+
+TRAVAS DE SEGURANÇA E PRECISÃO ABSOLUTA (BLINDAGEM CONTRA ERROS):
+1. CATÁLOGO FECHADO:
+   - Somos especialistas EXCLUSIVAS em Cílios, Sobrancelhas e Limpeza de Pele Profunda.
+   - NUNCA invente, ofereça ou agende: corte de cabelo, manicure/unhas em gel, depilação a laser, botox, preenchimento labial, massagens ou procedimentos médicos.
+   - Se pedirem algo fora, responda com carinho: "No momento somos especialistas exclusivos em cuidados do olhar (cílios e sobrancelhas) e estética facial! Não realizamos [serviço pedido], mas adoraríamos te receber para cuidar do seu olhar ou da sua pele ✨".
+2. DISTINÇÃO CLARA ENTRE SERVIÇO E PRODUTO:
+   - SERVIÇOS (feitos no studio): Exigem horário na agenda e sinal PIX para reservar a profissional.
+   - PRODUTOS (home-care para casa): Não ocupam tempo de atendimento na cabine. A cliente pode comprar para retirar na recepção ou receber por motoboy no mesmo dia!
+   - Se a cliente agendar um serviço e perguntar como cuidar depois, sugira o produto ideal para os cuidados em casa (ex: Espuma para cílios, Gel para sobrancelhas).
+3. ZERO DESCONTO ARBITRÁRIO:
+   - Nossos preços são estritamente os da tabela. NUNCA altere os valores ou dê descontos por conta própria.
+   - Se a cliente pechinchar: explique com elegância que nossos valores refletem os produtos importados de alta qualidade e o atendimento exclusivo, e lembre que aceitamos parcelamento em até 12x no cartão de crédito!
+4. PREVENÇÃO DE CONFLITO DE AGENDA:
+   - Atendemos APENAS entre ${db.configuracoes.horarioAbertura} e ${db.configuracoes.horarioFechamento}.
+   - Se a cliente pedir um horário já ocupado ou fora do expediente, avise gentilmente e ofereça os horários vagos mais próximos.
+5. CONTRAINDICAÇÕES MÉDICAS:
+   - Micropigmentação é contraindicada para gestantes e lactantes nos primeiros meses sem autorização médica.
+   - Para extensão de cílios, alerte que não se deve molhar nas primeiras 24 horas para a cura da cola.
+6. SINAL PIX:
+   - Reforce com delicadeza que o sinal é exigido para travar o horário com a profissional na agenda e é 100% abatido no dia do atendimento.
+7. CADASTRO OBRIGATÓRIO (NOME COMPLETO, DATA DE ANIVERSÁRIO E ENDEREÇO COM CEP):
+   - Para concluir qualquer agendamento ou pedido de produtos, o Studio exige o cadastro completo da cliente com:
+     1) Nome Completo
+     2) Data de Aniversário (Dia e Mês, ex: 24/10 ou 16 de Outubro) -> Explique com muito carinho e entusiasmo: "para você participar do nosso Clube VIP de Aniversariantes e ganhar mimos e descontos exclusivos no mês do seu dia! 🎂🎁"
+     3) Endereço residencial com CEP (para a ficha cadastral do Studio e entregas por motoboy).
+   - Se a cliente quiser agendar ou comprar e ainda não informou esses 3 dados, peça-os educadamente antes ou durante a confirmação!
+   - Se a cliente informar qualquer um desses dados, extraia-os no campo "dadosCliente": { "nomeCompleto": string, "dataNascimento": string, "endereco": string, "cep": string }.
+
+INSTRUÇÕES DE AÇÃO:
+1. Se a cliente quiser agendar um serviço e especificou o serviço e data/horário:
+   - "acao": "criar_agendamento"
+   - "dadosAgendamento": { "servicoId": string, "data": "YYYY-MM-DD", "horario": "HH:MM" }
+   - Avise que reservou o horário provisório e informe o valor do sinal com carinho.
+2. Se a cliente quiser comprar um produto e já escolheu a forma de envio (motoboy, retirada ou correios):
+   - "acao": "criar_pedido_produto"
+   - "dadosPedido": { "produtoId": string, "quantidade": number, "tipoEntrega": "motoboy" | "retirada" | "correios", "cep": string, "endereco": string }
+3. Se for apenas conversa, tirar dúvidas de preços, frete, benefícios das técnicas, procedimentos:
+   - "acao": "nenhuma"
+
+FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
+{
+  "respostaWhatsApp": "Texto humanizado e formatado para o WhatsApp...",
+  "acao": "nenhuma" | "criar_agendamento" | "criar_pedido_produto",
+  "dadosAgendamento": {
+    "servicoId": "id_do_servico",
+    "data": "YYYY-MM-DD",
+    "horario": "HH:MM"
+  },
+  "dadosPedido": {
+    "produtoId": "id_do_produto",
+    "quantidade": 1,
+    "tipoEntrega": "motoboy" | "retirada" | "correios",
+    "cep": "00000-000",
+    "endereco": "Rua..."
+  },
+  "dadosCliente": {
+    "nomeCompleto": "Nome Completo",
+    "dataNascimento": "DD/MM ou YYYY-MM-DD",
+    "endereco": "Rua, número, bairro",
+    "cep": "00000-000"
+  }
+}
+`;
+
+  for (const m of modelosParaTentar) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: m,
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.7,
+        },
+        systemInstruction: promptSistema,
+      });
+
+      const result = await model.generateContent(`Mensagem da cliente ${clienteNome}: "${mensagem}"`);
+      const textoJson = result.response.text();
+      const parsed = JSON.parse(textoJson);
+
+    let agendamentoCriado: Agendamento | null = null;
+    let pedidoCriado: Pedido | null = null;
+    let respostaFinal = parsed.respostaWhatsApp || "";
+
+    // Se a IA decidiu criar um agendamento
+    if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
+      const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
+      const dataAg = parsed.dadosAgendamento.data || hojeStr;
+      const horarioAg = parsed.dadosAgendamento.horario || "14:00";
+      const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${srv.valorSinal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+
+      agendamentoCriado = {
+        id: `ag-${Date.now()}`,
+        clienteNome,
+        clienteTelefone: "5511999998888",
+        servicoId: srv.id,
+        servicoNome: srv.nome,
+        data: dataAg,
+        horario: horarioAg,
+        duracaoMinutos: srv.duracaoMinutos,
+        valorTotal: srv.precoTotal,
+        valorSinal: srv.valorSinal,
+        sinalPago: false,
+        status: 'aguardando_sinal',
+        pixCodigo: pixCode,
+        criadoVia: 'whatsapp_ia',
+        createdAt: new Date().toISOString()
+      };
+
+      db.agendamentos.push(agendamentoCriado);
+      saveDb(db);
+
+      if (!respostaFinal.includes(pixCode)) {
+        respostaFinal += `\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\``;
+      }
+    }
+
+    // Se a IA decidiu criar um pedido de produto
+    if (parsed.acao === 'criar_pedido_produto' && parsed.dadosPedido?.produtoId) {
+      const prod = produtos.find(p => p.id === parsed.dadosPedido.produtoId) || produtos[0];
+      const qtd = parsed.dadosPedido.quantidade || 1;
+      const tipoEntrega = parsed.dadosPedido.tipoEntrega || 'motoboy';
+      const valorItens = (prod.precoVenda || 45.0) * qtd;
+      const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
+      const valorTotal = valorItens + valorFrete;
+
+      const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${valorTotal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+
+      if (!db.pedidos) db.pedidos = [];
+      pedidoCriado = {
+        id: `ped-${Date.now()}`,
+        clienteNome,
+        clienteTelefone: "5511999998888",
+        itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
+        tipoEntrega,
+        endereco: parsed.dadosPedido.endereco || '',
+        cep: parsed.dadosPedido.cep || '',
+        valorItens,
+        valorFrete,
+        valorTotal,
+        status: 'aguardando_pix',
+        pixCodigo: pixCode,
+        pago: false,
+        createdAt: new Date().toISOString()
+      };
+
+      // Baixa no estoque
+      prod.quantidade = Math.max(0, prod.quantidade - qtd);
+
+      db.pedidos.unshift(pedidoCriado);
+      saveDb(db);
+
+      if (!respostaFinal.includes(pixCode)) {
+        respostaFinal += `\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\``;
+      }
+    }
+
+    // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
+    if (parsed.dadosCliente || agendamentoCriado || pedidoCriado) {
+      if (!db.clientes) db.clientes = [];
+      const nomeIdentificado = parsed.dadosCliente?.nomeCompleto || clienteNome;
+      const dataNascIdentificada = parsed.dadosCliente?.dataNascimento || '';
+      const enderecoIdentificado = parsed.dadosCliente?.endereco || parsed.dadosPedido?.endereco || '';
+      const cepIdentificado = parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '';
+
+      const clienteExistente = db.clientes.find(c =>
+        c.nome.toLowerCase() === nomeIdentificado.toLowerCase() ||
+        c.nome.toLowerCase() === clienteNome.toLowerCase()
+      );
+
+      if (clienteExistente) {
+        if (parsed.dadosCliente?.nomeCompleto) clienteExistente.nome = parsed.dadosCliente.nomeCompleto;
+        if (dataNascIdentificada) clienteExistente.dataNascimento = dataNascIdentificada;
+        if (enderecoIdentificado) clienteExistente.endereco = enderecoIdentificado;
+        if (cepIdentificado) clienteExistente.cep = cepIdentificado;
+        if (agendamentoCriado) clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
+        if (pedidoCriado) clienteExistente.totalGasto = (clienteExistente.totalGasto || 0) + pedidoCriado.valorTotal;
+        saveDb(db);
+      } else if (nomeIdentificado && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado)) {
+        db.clientes.unshift({
+          id: `cli-${Date.now()}`,
+          nome: nomeIdentificado,
+          telefone: "5511999998888",
+          dataNascimento: dataNascIdentificada,
+          endereco: enderecoIdentificado,
+          cep: cepIdentificado,
+          ultimaVisita: hojeStr,
+          totalAtendimentos: agendamentoCriado ? 1 : 0,
+          totalGasto: agendamentoCriado ? agendamentoCriado.valorTotal : (pedidoCriado ? pedidoCriado.valorTotal : 0),
+          observacoes: `Cadastrada via WhatsApp com Manu (IA). Aniversário: ${dataNascIdentificada || 'Pendente'}`
+        });
+        saveDb(db);
+      }
+    }
+
+    return {
+      respostaBot: respostaFinal,
+      agendamentoCriado,
+      pedidoCriado
+    };
+  } catch (error) {
+    console.warn(`Tentativa com modelo ${m} falhou:`, error);
+  }
+}
+return null;
+}
+
+function normalizar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function formatarReal(valor: number): string {
+  return valor.toFixed(2).replace('.', ',');
+}
+
+function gerarRespostaRecepcionista(
+  mensagem: string,
+  clienteNome: string,
+  db: ReturnType<typeof getDb>
+): { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } {
+  const clean = normalizar(mensagem);
+  const servicos = db.servicos.filter(s => s.ativo);
+  const produtosVenda = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
+
+  // Mapear serviços citados
+  const servicosMencionados = servicos.filter(s => {
+    const sNome = normalizar(s.nome);
+
+    if ((clean.includes('limpeza') || clean.includes('pele') || clean.includes('cravo')) && sNome.includes('limpeza')) return true;
+    if ((clean.includes('cilio') || clean.includes('fio a fio') || clean.includes('volume') || clean.includes('extensao')) && sNome.includes('cilio')) return true;
+    if ((clean.includes('brow') || clean.includes('lamination')) && sNome.includes('brow')) return true;
+    if ((clean.includes('micro') || clean.includes('pigmentacao') || clean.includes('shadow')) && sNome.includes('micro')) return true;
+    if ((clean.includes('sobrancelha') || clean.includes('henna') || clean.includes('design') || clean.includes('designer')) && sNome.includes('sobrancelha')) return true;
+    return false;
+  });
+
+  // Mapear produtos para venda citados
+  const produtosMencionados = produtosVenda.filter(p => {
+    const pNome = normalizar(p.nome);
+    if ((clean.includes('espuma') || clean.includes('higienizadora') || clean.includes('shampoo')) && pNome.includes('espuma')) return true;
+    if ((clean.includes('serum') || clean.includes('oleo') || clean.includes('reparador') || clean.includes('fortalecedor')) && (pNome.includes('serum') || pNome.includes('oleo'))) return true;
+    return false;
+  });
+
+  // 1. CONSULTA DE FRETE / CEP (ex: "quanto é o frete pro CEP 01304-001?", "calcula frete 04538133")
+  const matchCep = clean.match(/\b\d{5}-?\d{3}\b/);
+  if (matchCep || ((clean.includes('frete') || clean.includes('entrega') || clean.includes('motoboy')) && clean.includes('cep'))) {
+    const cepEncontrado = matchCep ? matchCep[0] : 'seu CEP';
+    const taxaMotoboy = db.configuracoes.frete?.taxaMotoboy || 15.00;
+
+    return {
+      respostaBot: `Olá, ${clienteNome}! 🛵✨ Consultei para o CEP *${cepEncontrado}*:\n\n1️⃣ *🛵 Motoboy Express (Mesmo Dia):* R$ ${formatarReal(taxaMotoboy)} (entrega hoje até as 18h no seu endereço)\n2️⃣ *📦 Sedex Correios:* R$ 18,50 (1 a 2 dias úteis)\n3️⃣ *🏪 Retirada no Studio:* *GRÁTIS* (Rua Augusta, pronto em 1 hora)\n\nQual dessas opções você prefere para o seu pedido?`,
+      agendamentoCriado: null
+    };
+  }
+
+  // 2. PEDIDO DE PRODUTOS / VENDA VIA WHATSAPP (ex: "Vocês vendem espuma?", "Quero comprar o sérum", "Tem produto pra levar?")
+  const ehPerguntaProduto = 
+    clean.includes('espuma') || 
+    clean.includes('serum') || 
+    clean.includes('comprar') || 
+    clean.includes('vende') || 
+    clean.includes('produto') || 
+    clean.includes('home care') ||
+    clean.includes('levar pra casa');
+
+  if (ehPerguntaProduto && !clean.includes('marcar') && !clean.includes('agendar')) {
+    // Se a cliente já escolheu um método de entrega (ex: "quero a espuma por motoboy" ou "quero retirar a espuma")
+    if ((clean.includes('motoboy') || clean.includes('retirar') || clean.includes('correios') || clean.includes('sedex')) && produtosMencionados.length > 0) {
+      const prod = produtosMencionados[0];
+      const tipoEntrega = clean.includes('motoboy') ? 'motoboy' : clean.includes('retirar') ? 'retirada' : 'correios';
+      const valorFrete = tipoEntrega === 'motoboy' ? (db.configuracoes.frete?.taxaMotoboy || 15.00) : tipoEntrega === 'correios' ? 18.50 : 0.00;
+      const valorTotal = (prod.precoVenda || 45.00) + valorFrete;
+
+      const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${valorTotal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+
+      if (!db.pedidos) db.pedidos = [];
+      const novoPedido: Pedido = {
+        id: `ped-${Date.now()}`,
+        clienteNome,
+        clienteTelefone: "5511999998888",
+        itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: 1, precoUnitario: prod.precoVenda || 45.00 }],
+        tipoEntrega,
+        valorItens: prod.precoVenda || 45.00,
+        valorFrete,
+        valorTotal,
+        status: 'aguardando_pix',
+        pixCodigo: pixCode,
+        pago: false,
+        createdAt: new Date().toISOString()
+      };
+
+      db.pedidos.unshift(novoPedido);
+      saveDb(db);
+
+      const entregaTexto = tipoEntrega === 'motoboy' 
+        ? '🛵 Entrega via Motoboy Express (Mesmo Dia)' 
+        : tipoEntrega === 'retirada' 
+        ? '🏪 Retirada no Studio (Pronto em 1h)' 
+        : '📦 Envio via Sedex Correios';
+
+      return {
+        respostaBot: `Perfeito, ${clienteNome}! 🛍️ Pedido registrado com sucesso:\n\n• *1x ${prod.nome}*: R$ ${formatarReal(prod.precoVenda || 45)}\n• *Frete:* ${entregaTexto} ${valorFrete > 0 ? `(R$ ${formatarReal(valorFrete)})` : '(*GRÁTIS*)'}\n\n💰 *Total do Pedido: R$ ${formatarReal(valorTotal)}*\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\`\n\nAssim que fizer o PIX, me mande o comprovante e seu endereço completo aqui para o envio imediato! ✨📦`,
+        agendamentoCriado: null,
+        pedidoCriado: novoPedido
+      };
+    }
+
+    // Se perguntou quais produtos temos ou o valor de algum
+    if (produtosMencionados.length > 0) {
+      const prod = produtosMencionados[0];
+      return {
+        respostaBot: `Temos sim, ${clienteNome}! ✨ Nosso produto de maior sucesso é a *${prod.nome}* por *R$ ${formatarReal(prod.precoVenda || 45)}*! 💖\n\nEla é formulada com pH neutro para limpar os fios sem arder os olhos e faz a extensão durar até 2x mais tempo!\n\nVocê prefere:\n1️⃣ *Retirar aqui no Studio* (sem frete)\n2️⃣ *Receber hoje por Motoboy* (se quiser, me passa seu CEP ou bairro para calcular o frete!) 🛵📦`,
+        agendamentoCriado: null
+      };
+    }
+
+    // Catálogo geral de produtos
+    const listaProdutos = produtosVenda.map(p => `• *${p.nome}*: R$ ${formatarReal(p.precoVenda || 0)}`).join('\n');
+    return {
+      respostaBot: `Olá, ${clienteNome}! ✨ Temos uma linha de cuidados profissionais para você levar para casa:\n\n${listaProdutos || '• Espuma Higienizadora Especial de Cílios: R$ 45,00'}\n\nVocê pode *retirar aqui no Studio* ou pedir para *entregar no seu endereço por motoboy/correios*! Gostaria de pedir algum? 🛍️`,
+      agendamentoCriado: null
+    };
+  }
+
+  // 3. DÚVIDA / EXPLICAÇÃO DE PROCEDIMENTOS
+  const ehPerguntaExplicativa = 
+    clean.includes('o que e') || 
+    clean.includes('oq e') || 
+    clean.includes('o q e') || 
+    clean.includes('como funciona') || 
+    clean.includes('como e') ||
+    clean.includes('para que serve') ||
+    clean.includes('dura quanto') ||
+    clean.includes('doi') ||
+    clean.includes('explica') ||
+    clean.includes('qual a diferenca');
+
+  if (ehPerguntaExplicativa) {
+    if (clean.includes('brow') || clean.includes('lamination')) {
+      const srv = servicos.find(s => normalizar(s.id).includes('brow') || normalizar(s.nome).includes('brow'));
+      return {
+        respostaBot: `Olá, ${clienteNome}! ✨ O *Brow Lamination* é uma técnica incrível que alinha e penteia os fios naturais da sobrancelha para cima!\n\nEle cria aquele efeito encorpado, volumoso e moderno (estilo gringa), cobrindo falhas sem precisar de agulhas. O procedimento é super indolor e o efeito dura de 4 a 6 semanas! 😍\n\nO valor é *R$ ${formatarReal(srv?.precoTotal || 120)}* (com design incluso). Quer que eu separe um horário para você experimentar?`,
+        agendamentoCriado: null
+      };
+    }
+
+    if (clean.includes('cilio') || clean.includes('extensao') || clean.includes('alongamento')) {
+      const srv = servicos.find(s => normalizar(s.nome).includes('cilio'));
+      return {
+        respostaBot: `A *Extensão de Cílios* é a colagem de fios sintéticos ultrafinos e levinhos sobre os seus cílios naturais! 👁️💖\n\nO olhar fica preenchido, com curvatura linda e você acorda pronta todos os dias sem precisar de rímel. Não dói nada (é super relaxante!) e dura cerca de 25 a 30 dias.\n\nO valor é *R$ ${formatarReal(srv?.precoTotal || 150)}*. Gostaria de marcar o seu?`,
+        agendamentoCriado: null
+      };
+    }
+
+    if (clean.includes('micro') || clean.includes('pigmentacao')) {
+      const srv = servicos.find(s => normalizar(s.nome).includes('micro'));
+      return {
+        respostaBot: `A *Micropigmentação de Sobrancelhas* é uma técnica semi-permanente que desenha fios ou um sombreado suave para corrigir falhas e dar volume natural às suas sobrancelhas! ✨\n\nUsamos anestésico tópico para garantir que você não sinta dor. O resultado fica muito natural e dura de 12 a 18 meses.\n\nO valor é *R$ ${formatarReal(srv?.precoTotal || 380)}*. Gostaria de agendar uma avaliação?`,
+        agendamentoCriado: null
+      };
+    }
+
+    if (clean.includes('limpeza') || clean.includes('pele')) {
+      const srv = servicos.find(s => normalizar(s.nome).includes('limpeza'));
+      return {
+        respostaBot: `Nossa *Limpeza de Pele Profunda* é completa e super relaxante! 🧖‍♀️🌸\n\nO protocolo inclui: esfoliação profunda, vapor de ozônio, extração sem dor de cravos e miliuns, alta frequência antibacteriana e máscara facial calmante.\n\nA sessão leva 1h15 e o valor é *R$ ${formatarReal(srv?.precoTotal || 130)}*. Sua pele vai respirar de novo! Vamos agendar?`,
+        agendamentoCriado: null
+      };
+    }
+
+    if (clean.includes('sobrancelha') || clean.includes('henna') || clean.includes('design') || clean.includes('designer')) {
+      const srv = servicos.find(s => normalizar(s.nome).includes('sobrancelha'));
+      return {
+        respostaBot: `Nosso *Design de Sobrancelhas com Henna* é feito através de mapeamento facial geométrico, respeitando a harmonia e o formato natural do seu rosto! 📐✨\n\nA aplicação de henna de alta fixação tonaliza a pele e os pelinhos, preenchendo falhas por até 10 dias.\n\nO valor é apenas *R$ ${formatarReal(srv?.precoTotal || 50)}*. Quer agendar para hoje ou amanhã?`,
+        agendamentoCriado: null
+      };
+    }
+  }
+
+  // 4. INTENÇÃO DE AGENDAMENTO
+  const ehAgendamento = 
+    clean.includes('marcar') || 
+    clean.includes('agendar') || 
+    clean.includes('horario') || 
+    clean.includes('vaga') || 
+    clean.includes('tem vaga') ||
+    clean.includes('segunda') || 
+    clean.includes('terca') || 
+    clean.includes('quarta') || 
+    clean.includes('quinta') || 
+    clean.includes('sexta') || 
+    clean.includes('sabado') ||
+    /\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/.test(clean) ||
+    /\b(as|as)\s*(0?[89]|1[0-9]|20)h?\b/.test(clean);
+
+  if (ehAgendamento) {
+    let servicoEncontrado = servicosMencionados[0] || servicos[0];
+
+    let horarioEscolhido = "15:00";
+    const matchHorario = clean.match(/\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/);
+    const matchHorasSimples = clean.match(/\b(as)\s*(0?[89]|1[0-9]|20)h?\b/);
+
+    if (matchHorario) {
+      horarioEscolhido = matchHorario[0];
+    } else if (matchHorasSimples) {
+      const hora = matchHorasSimples[2];
+      horarioEscolhido = `${hora.padStart(2, '0')}:00`;
+    }
+
+    let dataEscolhida = new Date().toISOString().split('T')[0];
+    if (clean.includes('amanha')) {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      dataEscolhida = d.toISOString().split('T')[0];
+    }
+
+    const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${servicoEncontrado.valorSinal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const novoAgendamento: Agendamento = {
+      id: `ag-${Date.now()}`,
+      clienteNome,
+      clienteTelefone: "5511999998888",
+      servicoId: servicoEncontrado.id,
+      servicoNome: servicoEncontrado.nome,
+      data: dataEscolhida,
+      horario: horarioEscolhido,
+      duracaoMinutos: servicoEncontrado.duracaoMinutos,
+      valorTotal: servicoEncontrado.precoTotal,
+      valorSinal: servicoEncontrado.valorSinal,
+      sinalPago: false,
+      status: 'aguardando_sinal',
+      pixCodigo: pixCode,
+      criadoVia: 'whatsapp_ia',
+      observacoes: `Solicitado via WhatsApp: "${mensagem}"`,
+      createdAt: new Date().toISOString()
+    };
+
+    db.agendamentos.push(novoAgendamento);
+    saveDb(db);
+
+    const diaTexto = clean.includes('amanha') ? 'amanhã' : 'hoje';
+
+    return {
+      respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\`\n\nAssim que fizer a transferência, nossa confirmação chega aqui em instantes! Te esperamos com muito carinho! 💖`,
+      agendamentoCriado: novoAgendamento
+    };
+  }
+
+  // 5. PERGUNTAS SOBRE VALORES / PREÇOS
+  const ehPerguntaPreco = 
+    clean.includes('sai') || 
+    clean.includes('fica') || 
+    clean.includes('custa') || 
+    clean.includes('quanto') || 
+    clean.includes('valor') || 
+    clean.includes('preco') || 
+    clean.includes('tabela') || 
+    clean.includes('catalogo') || 
+    clean.includes('orcamento');
+
+  if (ehPerguntaPreco || servicosMencionados.length > 0) {
+    if (servicosMencionados.length > 0) {
+      const lista = servicosMencionados.map(s => `• *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
+      return {
+        respostaBot: `Olá, ${clienteNome}! ✨ Seguem os valores dos procedimentos:\n\n${lista}\n\nLembrando que o sinal é abatido no dia do seu atendimento! Qual desses você quer marcar comigo? Tenho horários vagos hoje e nesta semana! 💕`,
+        agendamentoCriado: null
+      };
+    }
+
+    const listaCompleta = servicos.map(s => `• *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
+    return {
+      respostaBot: `Olá, ${clienteNome}! Seja muito bem-vinda ao *${db.configuracoes.nomeEmpresa}*! ✨\n\nAqui está nossa tabela de serviços e valores:\n\n${listaCompleta}\n\nQual desses você gostaria de fazer? Me diga um dia e horário bom para você! 🗓️`,
+      agendamentoCriado: null
+    };
+  }
+
+  // 6. SAUDAÇÃO PADRÃO
+  return {
+    respostaBot: `Olá, ${clienteNome}! Tudo bem? Sou a Manu, recepcionista virtual do *${db.configuracoes.nomeEmpresa}* 🌸.\n\nComo posso te ajudar hoje?\n• Agendar Procedimentos (Cílios, Sobrancelhas, Limpeza de Pele)\n• Tirar dúvidas de valores e técnicas\n• Comprar produtos para cuidados em casa (com entrega ou retirada! 🛍️)`,
+    agendamentoCriado: null
+  };
+}
+
+export async function GET() {
+  const db = getDb();
+  const apiKey = db.configuracoes.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  return NextResponse.json({
+    status: db.configuracoes.statusWhatsApp,
+    iaAtiva: db.configuracoes.iaAtiva,
+    telefone: db.configuracoes.telefoneWhatsApp,
+    prompt: db.configuracoes.promptRecepcionista,
+    nomeEmpresa: db.configuracoes.nomeEmpresa,
+    chavePix: db.configuracoes.chavePix,
+    sinalPadrao: db.configuracoes.sinalPadrao,
+    frete: db.configuracoes.frete,
+    geminiApiKey: apiKey,
+    modeloGemini: db.configuracoes.modeloGemini || "gemini-1.5-flash",
+    usandoGemini: !!apiKey
+  });
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const db = getDb();
+
+    if (body.action === 'toggle_ia') {
+      db.configuracoes.iaAtiva = !db.configuracoes.iaAtiva;
+      saveDb(db);
+      return NextResponse.json({ iaAtiva: db.configuracoes.iaAtiva });
+    }
+
+    if (body.action === 'update_config') {
+      if (body.nomeEmpresa) db.configuracoes.nomeEmpresa = body.nomeEmpresa;
+      if (body.telefoneWhatsApp) db.configuracoes.telefoneWhatsApp = body.telefoneWhatsApp;
+      if (body.chavePix) db.configuracoes.chavePix = body.chavePix;
+      if (body.sinalPadrao !== undefined) db.configuracoes.sinalPadrao = Number(body.sinalPadrao);
+      if (body.promptRecepcionista) db.configuracoes.promptRecepcionista = body.promptRecepcionista;
+      if (body.frete) db.configuracoes.frete = { ...db.configuracoes.frete, ...body.frete };
+      if (body.geminiApiKey !== undefined) db.configuracoes.geminiApiKey = body.geminiApiKey;
+      if (body.modeloGemini !== undefined) db.configuracoes.modeloGemini = body.modeloGemini;
+      saveDb(db);
+      return NextResponse.json(db.configuracoes);
+    }
+
+    if (body.action === 'testar_gemini') {
+      const chave = body.geminiApiKey || process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
+      const modelo = body.modeloGemini || db.configuracoes.modeloGemini || 'gemini-3.5-flash-lite';
+      if (!chave) {
+        return NextResponse.json({ sucesso: false, erro: 'Nenhuma Chave de API do Google Gemini informada.' }, { status: 400 });
+      }
+
+      const modelosParaTestar = Array.from(new Set([
+        modelo,
+        'gemini-3.5-flash-lite',
+        'gemini-flash-lite-latest',
+        'gemini-3.1-flash-lite'
+      ]));
+
+      const genAI = new GoogleGenerativeAI(chave);
+      let ultimoErro = '';
+
+      for (const m of modelosParaTestar) {
+        try {
+          const model = genAI.getGenerativeModel({ model: m });
+          const res = await model.generateContent("Diga em uma frase elegante que a Manu e o Google Gemini estão conectados e prontos para atender as clientes do Studio ✨");
+          return NextResponse.json({
+            sucesso: true,
+            mensagem: res.response.text(),
+            modelo: m
+          });
+        } catch (err: any) {
+          ultimoErro = err.message || 'Falha ao autenticar na API do Google Gemini.';
+        }
+      }
+
+      return NextResponse.json({
+        sucesso: false,
+        erro: ultimoErro
+      }, { status: 500 });
+    }
+
+    if (body.action === 'simular_mensagem' || body.event === 'messages.upsert') {
+      const mensagemTexto = body.mensagem || body.data?.message?.conversation || "Olá";
+      const remetenteNome = body.clienteNome || "Mariana (Teste)";
+
+      let resultado: { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null = null;
+      const apiKey = process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
+      let motorUtilizado = 'local';
+
+      if (apiKey && db.configuracoes.iaAtiva) {
+        try {
+          resultado = await gerarRespostaGemini(
+            mensagemTexto,
+            remetenteNome,
+            db,
+            apiKey,
+            db.configuracoes.modeloGemini || 'gemini-1.5-flash'
+          );
+          if (resultado) {
+            motorUtilizado = `google_${db.configuracoes.modeloGemini || 'gemini-1.5-flash'}`;
+          }
+        } catch (e) {
+          console.warn("Erro ao gerar com Gemini, usando fallback local:", e);
+        }
+      }
+
+      if (!resultado) {
+        resultado = gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db);
+      }
+
+      return NextResponse.json({
+        sucesso: true,
+        respostaBot: resultado.respostaBot,
+        agendamentoCriado: resultado.agendamentoCriado,
+        pedidoCriado: resultado.pedidoCriado,
+        motorUtilizado
+      });
+    }
+
+    return NextResponse.json({ error: 'Ação não reconhecida' }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Erro no processamento do WhatsApp' }, { status: 500 });
+  }
+}
