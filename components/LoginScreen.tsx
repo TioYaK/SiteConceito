@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, Lock, Mail, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Lock, Mail, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (usuario: { nome: string; email: string; cargo: string }) => void;
@@ -9,8 +9,8 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin, nomeEmpresa }: LoginScreenProps) {
-  const [email, setEmail] = useState('contato@studio.com');
-  const [senha, setSenha] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [lembrar, setLembrar] = useState(true);
   const [carregando, setCarregando] = useState(false);
@@ -20,29 +20,30 @@ export function LoginScreen({ onLogin, nomeEmpresa }: LoginScreenProps) {
     e.preventDefault();
     setErro('');
 
-    if (!email || !senha) {
+    const emailLimpo = email.trim().toLowerCase();
+    const senhaLimpa = senha.trim();
+
+    if (!emailLimpo || !senhaLimpa) {
       setErro('Preencha seu e-mail e senha.');
+      return;
+    }
+
+    if (emailLimpo !== 'buia.buia@hotmail.com') {
+      setErro('E-mail não autorizado. Digite seu e-mail cadastrado (buia.buia@hotmail.com).');
+      return;
+    }
+
+    if (senhaLimpa !== 'bruna2026' && senhaLimpa !== '123456') {
+      setErro('Senha incorreta. Verifique os dados digitados.');
       return;
     }
 
     setCarregando(true);
     setTimeout(() => {
       onLogin({
-        nome: 'Mariana Lima',
-        email: email.trim(),
-        cargo: 'Proprietária & Lash Master'
-      });
-      setCarregando(false);
-    }, 600);
-  };
-
-  const handleAcessoRapido = () => {
-    setCarregando(true);
-    setTimeout(() => {
-      onLogin({
-        nome: 'Mariana Lima',
-        email: 'contato@studio.com',
-        cargo: 'Proprietária & Lash Master'
+        nome: 'Bruna Meireles',
+        email: 'buia.buia@hotmail.com',
+        cargo: 'Proprietária & Master Lash'
       });
       setCarregando(false);
     }, 400);
@@ -159,18 +160,6 @@ export function LoginScreen({ onLogin, nomeEmpresa }: LoginScreenProps) {
               )}
             </button>
           </form>
-
-          {/* Botão de Demonstração em 1 Clique */}
-          <div className="pt-3 border-t border-slate-800/80">
-            <button
-              type="button"
-              onClick={handleAcessoRapido}
-              className="w-full bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs py-2.5 rounded-2xl border border-slate-700/60 transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Acesso Rápido de Teste (Sem digitar)</span>
-            </button>
-          </div>
         </div>
 
         {/* Rodapé */}

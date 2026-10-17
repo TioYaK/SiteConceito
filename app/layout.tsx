@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Recepcionista Pro - Agenda & Gestão Inteligente",
-  description: "Painel simples e didático para agendamentos, recepção automática e gestão de caixa.",
+  title: "Studio Bruna Meireles • Estética Facial & Gestão com IA",
+  description: "Studio Bruna Meireles - Extensão de Cílios, Design de Sobrancelhas, Micropigmentação e Recepção Inteligente 24h via WhatsApp.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Agenda Pro",
+    title: "Studio Bruna Meireles",
   },
 };
 

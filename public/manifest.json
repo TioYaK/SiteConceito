@@ -1,7 +1,7 @@
 {
-  "name": "Recepcionista Pro - Agenda & Gestão",
-  "short_name": "Agenda Pro",
-  "description": "Aplicativo de agendamento, recepção automática e gestão de caixa para pequenos negócios.",
+  "name": "Studio Bruna Meireles • Estética & Lash",
+  "short_name": "Studio Bruna",
+  "description": "Studio Bruna Meireles - Gestão de Agendamentos, Atendimento com IA e Catálogo Digital.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
