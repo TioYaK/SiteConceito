@@ -182,15 +182,38 @@ export default function CatalogoPublicoPage() {
     return true;
   });
 
+  const getBadgeProcedimento = (nome: string) => {
+    const n = nome.toLowerCase();
+    if (n.includes('cilio') || n.includes('extensao')) {
+      return { texto: '⭐ Mais Pedido', classe: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300/40' };
+    }
+    if (n.includes('brow') || n.includes('lamination')) {
+      return { texto: '🔥 Tendência 2026', classe: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-300/40' };
+    }
+    if (n.includes('micro')) {
+      return { texto: '✨ Efeito 18 Meses', classe: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-300/40' };
+    }
+    if (n.includes('limpeza')) {
+      return { texto: '💆 Hidratação & Detox', classe: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300/40' };
+    }
+    return { texto: '💎 Design Exclusivo', classe: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-300/40' };
+  };
+
   return (
     <div className={`min-h-screen transition-colors ${temaEscuro ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
       {/* Topo / Header Profile Studio */}
-      <header className="relative bg-gradient-to-b from-emerald-900 via-teal-900 to-slate-900 text-white pt-8 pb-12 px-4 shadow-xl">
-        <div className="max-w-2xl mx-auto space-y-4">
+      <header className="relative bg-gradient-to-b from-emerald-950 via-slate-900 to-slate-950 text-white pt-8 pb-12 px-4 shadow-2xl overflow-hidden border-b border-emerald-950/60">
+        {/* Banner de Fundo Cinematográfico Sutil */}
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <img src="/studio-banner.jpg" alt="" className="w-full h-full object-cover scale-105 blur-[2px]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/80 to-slate-950" />
+        </div>
+
+        <div className="max-w-2xl mx-auto space-y-4 relative z-10">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-200 border border-white/10 flex items-center gap-1.5">
+            <span className="text-[11px] font-bold tracking-wider uppercase px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md text-emerald-200 border border-white/10 flex items-center gap-1.5 shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              Catálogo Oficial & Atendimento IA 24h
+              Catálogo Oficial &amp; Atendimento IA 24h
             </span>
 
             <button
@@ -203,28 +226,46 @@ export default function CatalogoPublicoPage() {
           </div>
 
           <div className="flex items-center gap-4 pt-2">
-            <div className="relative">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-tr from-emerald-400 via-teal-300 to-amber-200 p-0.5 shadow-xl">
-                <div className="w-full h-full bg-slate-900 rounded-[22px] flex items-center justify-center text-2xl font-black text-emerald-400">
-                  ✨
-                </div>
+            <div className="relative flex-shrink-0">
+              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-3xl p-0.5 bg-gradient-to-tr from-amber-300 via-emerald-400 to-teal-300 shadow-2xl shadow-emerald-950/80 overflow-hidden">
+                <img
+                  src="/studio-avatar.jpg"
+                  alt={dados?.nomeEmpresa || 'Studio Bruna Meireles'}
+                  className="w-full h-full object-cover rounded-[22px] bg-slate-950"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/icon.svg'; }}
+                />
               </div>
-              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center" title="Online Agora">
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center shadow-lg" title="Atendimento Online Agora">
                 <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
               </span>
             </div>
 
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                  {dados?.nomeEmpresa || 'Studio Bella'}
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white truncate">
+                  {dados?.nomeEmpresa || 'Studio Bruna Meireles'}
                 </h1>
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" /> Verificado
+                </span>
               </div>
               <p className="text-xs text-emerald-100/90 font-medium mt-0.5">
-                Cílios • Sobrancelhas • Micropigmentação • Cuidados Pós
+                Cílios • Sobrancelhas • Micropigmentação • Estética Facial
               </p>
-              <div className="flex items-center gap-3 text-[11px] text-emerald-200/80 mt-1.5">
+              
+              {/* Avaliações e Biossegurança */}
+              <div className="flex items-center gap-2 text-[11px] text-amber-300 font-semibold mt-1 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+                  5.0 (Google Reviews)
+                </span>
+                <span className="text-emerald-400/60">•</span>
+                <span className="text-emerald-200/90 font-medium">
+                  Biossegurança &amp; Materiais Descartáveis
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-[11px] text-emerald-200/80 mt-1">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3 text-amber-300" />
                   {dados?.horarioAbertura || '09:00'} às {dados?.horarioFechamento || '19:00'}
@@ -382,52 +423,60 @@ export default function CatalogoPublicoPage() {
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-400">Nenhum procedimento encontrado</p>
               </div>
             ) : (
-              servicosFiltrados.map((srv) => (
-                <div
-                  key={srv.id}
-                  className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
-                        {srv.categoria}
-                      </span>
-                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1">
-                        {srv.nome}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                        {srv.descricao}
-                      </p>
+              servicosFiltrados.map((srv) => {
+                const badge = getBadgeProcedimento(srv.nome);
+                return (
+                  <div
+                    key={srv.id}
+                    className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
+                            {srv.categoria}
+                          </span>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${badge.classe}`}>
+                            {badge.texto}
+                          </span>
+                        </div>
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1.5">
+                          {srv.nome}
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          {srv.descricao}
+                        </p>
+                      </div>
+
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white block">
+                          R$ {srv.precoTotal.toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                          Sinal: R$ {srv.valorSinal.toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-right flex-shrink-0">
-                      <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white block">
-                        R$ {srv.precoTotal.toFixed(2).replace('.', ',')}
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        Duração média: <b>{srv.duracaoMinutos} min</b>
                       </span>
-                      <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 block mt-0.5">
-                        Sinal: R$ {srv.valorSinal.toFixed(2).replace('.', ',')}
-                      </span>
+
+                      <a
+                        href={criarLinkWhatsApp(`Olá Manu! ✨ Vi no catálogo e gostaria de agendar o procedimento *${srv.nome}* (R$ ${srv.precoTotal.toFixed(2).replace('.', ',')}). Quais os próximos horários disponíveis?`)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Agendar no WhatsApp</span>
+                      </a>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <span className="flex items-center gap-1 text-slate-400">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      Duração média: <b>{srv.duracaoMinutos} min</b>
-                    </span>
-
-                    <a
-                      href={criarLinkWhatsApp(`Olá Manu! ✨ Vi no catálogo e gostaria de agendar o procedimento *${srv.nome}* (R$ ${srv.precoTotal.toFixed(2).replace('.', ',')}). Quais os próximos horários disponíveis?`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-emerald-600/20 cursor-pointer"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Agendar no WhatsApp</span>
-                    </a>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
@@ -653,17 +702,25 @@ export default function CatalogoPublicoPage() {
         )}
 
         {/* Rodapé do Catálogo */}
-        <footer className="pt-6 text-center text-xs text-slate-400 dark:text-slate-500 space-y-2 border-t border-slate-200/60 dark:border-slate-800/60">
-          <p>© {new Date().getFullYear()} {dados?.nomeEmpresa || 'Studio Bella'} • Todos os direitos reservados.</p>
-          <p className="text-[11px]">
-            Desenvolvido com <strong>Recepcionista Pro AI</strong> • Tecnologia inteligente para clínicas de estética.
+        <footer className="pt-6 pb-4 text-center text-xs text-slate-400 dark:text-slate-500 space-y-2 border-t border-slate-200/60 dark:border-slate-800/60">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <div className="w-6 h-6 rounded-lg overflow-hidden p-0.5 bg-gradient-to-tr from-amber-300 to-emerald-400">
+              <img src="/icon.svg" alt="Studio Bruna Meireles" className="w-full h-full object-cover rounded-md" />
+            </div>
+            <span className="font-bold text-slate-700 dark:text-slate-200 text-xs">
+              Studio Bruna Meireles
+            </span>
+          </div>
+          <p>© {new Date().getFullYear()} Studio Bruna Meireles • Todos os direitos reservados.</p>
+          <p className="text-[11px] text-slate-400">
+            Especialista em Extensão de Cílios, Design de Sobrancelhas e Estética Facial.
           </p>
           <div>
             <a
               href="/"
               className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
             >
-              Área Administrativa do Studio →
+              Área de Gestão do Studio →
             </a>
           </div>
         </footer>

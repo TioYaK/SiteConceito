@@ -58,8 +58,8 @@ export function LoginScreen({ onLogin, nomeEmpresa }: LoginScreenProps) {
       <div className="w-full max-w-md relative z-10 space-y-6">
         {/* Identidade Visual / Cabeçalho */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-xl shadow-emerald-500/20 mb-1">
-            <Sparkles className="w-7 h-7 text-emerald-50" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl p-0.5 bg-gradient-to-tr from-amber-300 via-emerald-400 to-teal-400 shadow-2xl shadow-emerald-500/25 mb-1.5 overflow-hidden">
+            <img src="/icon.svg" alt={nomeEmpresa} className="w-full h-full object-cover rounded-[22px]" />
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">

@@ -33,8 +33,8 @@ export function Navbar({
       <div className="max-w-6xl mx-auto flex items-center justify-between gap-2.5">
         {/* Identidade do Negócio */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-200 dark:shadow-none flex-shrink-0">
-            <Sparkles className="w-5 h-5 text-emerald-100" />
+          <div className="w-10 h-10 rounded-2xl p-0.5 bg-gradient-to-tr from-amber-400 via-emerald-500 to-teal-400 shadow-md shadow-emerald-500/20 flex-shrink-0 overflow-hidden">
+            <img src="/icon.svg" alt={nomeEmpresa} className="w-full h-full object-cover rounded-[14px]" />
           </div>
           <div>
             <h1 className="font-extrabold text-slate-800 dark:text-white text-sm sm:text-base leading-tight max-w-[120px] xs:max-w-[170px] sm:max-w-none truncate">
