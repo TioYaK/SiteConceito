@@ -220,12 +220,19 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
           <button
             onClick={() => {
               setTipo('venda_balcao');
+              setNome('');
+              setCustoUnitario('');
+              setPrecoVenda('');
+              setDescricao('');
+              setBeneficios('');
+              setModoUso('');
               setModalAberto(true);
             }}
-            className="flex items-center gap-1.5 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow transition cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-emerald-600/20 transition cursor-pointer whitespace-nowrap"
+            title="Cadastrar produto que vai aparecer no Catálogo Online da Bio e na IA Manu"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Novo Item</span>
+            <span>+ Produto p/ Catálogo</span>
           </button>
         </div>
       </div>
@@ -485,6 +492,102 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
                   </button>
                 </div>
               </div>
+
+              {/* Banner Informativo de Sincronização com o Catálogo */}
+              {tipo === 'venda_balcao' && (
+                <div className="space-y-2.5">
+                  <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="text-emerald-800 dark:text-emerald-200 text-[11px] leading-relaxed">
+                      <strong>Sincronização Automática:</strong> Este produto aparecerá imediatamente no <strong>Catálogo Online da Bio</strong> (studiobrunameireles.com.br/catalogo) e a <strong>Manu (IA)</strong> poderá recomendá-lo e vendê-lo no WhatsApp!
+                    </span>
+                  </div>
+
+                  {/* Sugestões Rápidas de Produtos Populares */}
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-amber-500/10 border border-emerald-200/80 dark:border-emerald-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Sugestões Rápidas (1 Clique):
+                      </span>
+                      <span className="text-[10px] text-slate-400">Preenche todos os campos</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNome('Espuma Higienizadora Especial de Cílios');
+                          setCategoria('Cílios & Olhos');
+                          setCustoUnitario('18.00');
+                          setPrecoVenda('45.00');
+                          setQuantidade('10');
+                          setMinimoAlerta('3');
+                          setDescricao('Espuma formulada com pH fisiológico para limpeza diária das extensões de cílios sem arder os olhos.');
+                          setBeneficios('Aumenta a retenção dos cílios em até 2x, remove oleosidade e previne infecções.');
+                          setModoUso('Aplicar 1 pump na ponta dos dedos ou pincel macio, massagear os cílios fechados e enxaguar com água.');
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-800 font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-sm"
+                      >
+                        🫧 Espuma de Cílios (R$ 45)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNome('Sérum Fortalecedor & Nutritivo de Sobrancelhas');
+                          setCategoria('Sobrancelhas');
+                          setCustoUnitario('22.00');
+                          setPrecoVenda('55.00');
+                          setQuantidade('8');
+                          setMinimoAlerta('2');
+                          setDescricao('Complexo vitamínico e peptídeos botânicos para estimular o crescimento natural dos fios das sobrancelhas.');
+                          setBeneficios('Preenche falhas, estimula novos fios, hidrata e previne a queda pós-design ou micropigmentação.');
+                          setModoUso('Passar 1 vez ao dia antes de dormir com o aplicador nas sobrancelhas limpas.');
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-800 font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-sm"
+                      >
+                        🌿 Sérum de Sobrancelhas (R$ 55)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNome('Gel Modelador & Alinhador Brow Lamination');
+                          setCategoria('Sobrancelhas');
+                          setCustoUnitario('15.00');
+                          setPrecoVenda('38.00');
+                          setQuantidade('10');
+                          setMinimoAlerta('3');
+                          setDescricao('Gel incolor com efeito laminado que mantém as sobrancelhas alinhadas e penteadas o dia todo sem esfarelar.');
+                          setBeneficios('Fixação por 24h, efeito brow lamination instantâneo, fórmula leve que não endurece.');
+                          setModoUso('Pentear os fios para cima com a escovinha no sentido desejado e aguardar secar.');
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-800 font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-sm"
+                      >
+                        ✨ Gel Brow Lamination (R$ 38)
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNome('Máscara Facial Calmante Pós-Procedimento');
+                          setCategoria('Estética Facial');
+                          setCustoUnitario('20.00');
+                          setPrecoVenda('49.00');
+                          setQuantidade('6');
+                          setMinimoAlerta('2');
+                          setDescricao('Máscara calmante com camomila, calêndula e ácido hialurônico para regeneração rápida da pele após limpeza profunda.');
+                          setBeneficios('Reduz vermelhidão imediata, restaura a barreira cutânea e hidrata profundamente.');
+                          setModoUso('Aplicar camada generosa sobre o rosto limpo, deixar agir por 15 minutos e enxaguar.');
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700 border border-emerald-200 dark:border-emerald-800 font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer shadow-sm"
+                      >
+                        🧖‍♀️ Máscara Calmante Facial (R$ 49)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Nome */}
               <div>

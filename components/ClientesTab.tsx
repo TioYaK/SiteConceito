@@ -19,7 +19,16 @@ import {
   X,
   Cake,
   Gift,
-  MapPin
+  MapPin,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  Check,
+  RefreshCw,
+  AlertCircle,
+  Trash2,
+  ClipboardPaste,
+  CheckCircle
 } from 'lucide-react';
 import { Cliente } from '@/lib/store';
 
@@ -27,9 +36,15 @@ interface ClientesTabProps {
   clientes: Cliente[];
   onNovoCliente: (cliente: Partial<Cliente>) => void;
   onEditarCliente: (cliente: Partial<Cliente>) => void;
+  onRecarregarClientes?: () => void;
 }
 
-export function ClientesTab({ clientes, onNovoCliente, onEditarCliente }: ClientesTabProps) {
+export function ClientesTab({ 
+  clientes, 
+  onNovoCliente, 
+  onEditarCliente, 
+  onRecarregarClientes 
+}: ClientesTabProps) {
   const [busca, setBusca] = useState('');
   const [filtro, setFiltro] = useState<'todos' | 'aniversario' | 'manutencao' | 'vip'>('todos');
   const [modalAberto, setModalAberto] = useState(false);
@@ -47,6 +62,216 @@ export function ClientesTab({ clientes, onNovoCliente, onEditarCliente }: Client
   const [estiloMapping, setEstiloMapping] = useState('Volume Brasileiro (Gatinho)');
   const [alergias, setAlergias] = useState('Nenhuma');
   const [observacoes, setObservacoes] = useState('');
+
+  // Estados do Modal de Importação do WhatsApp
+  interface ContatoImportadoPreview {
+    idTemp: string;
+    nome: string;
+    telefone: string;
+    telefoneFormatado: string;
+    dataNascimento?: string;
+    endereco?: string;
+    jaExiste: boolean;
+    selecionado: boolean;
+  }
+
+  const [modalImportarAberto, setModalImportarAberto] = useState(false);
+  const [abaImportacao, setAbaImportacao] = useState<'colar' | 'arquivo'>('colar');
+  const [textoColado, setTextoColado] = useState('');
+  const [contatosPreview, setContatosPreview] = useState<ContatoImportadoPreview[]>([]);
+  const [salvandoLote, setSalvandoLote] = useState(false);
+  const [resultadoImportacao, setResultadoImportacao] = useState<{ sucesso: boolean; mensagem: string } | null>(null);
+  const [nomeArquivoCarregado, setNomeArquivoCarregado] = useState<string | null>(null);
+
+  const formatarTelefoneVisual = (raw: string) => {
+    let clean = raw.replace(/\D/g, '');
+    if (clean.length === 10 || clean.length === 11) {
+      clean = '55' + clean;
+    }
+    if (clean.startsWith('55') && clean.length === 13) {
+      return `+55 (${clean.substring(2, 4)}) ${clean.substring(4, 9)}-${clean.substring(9)}`;
+    }
+    if (clean.startsWith('55') && clean.length === 12) {
+      return `+55 (${clean.substring(2, 4)}) ${clean.substring(4, 8)}-${clean.substring(8)}`;
+    }
+    return raw;
+  };
+
+  const processarTextoParaPreview = (raw: string) => {
+    if (!raw.trim()) {
+      setContatosPreview([]);
+      return;
+    }
+
+    const telefonesExistentes = new Set(clientes.map(c => c.telefone.replace(/\D/g, '')));
+    const linhas = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const parsed: ContatoImportadoPreview[] = [];
+    const telefonesVistosNesteLote = new Set<string>();
+
+    for (let i = 0; i < linhas.length; i++) {
+      const linha = linhas[i];
+
+      const matchTelefone = linha.match(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4,5}[-\s]?\d{4}/);
+      if (!matchTelefone) continue;
+
+      const rawTel = matchTelefone[0];
+      let cleanTel = rawTel.replace(/\D/g, '');
+      if (cleanTel.length === 10 || cleanTel.length === 11) {
+        cleanTel = `55${cleanTel}`;
+      }
+
+      if (cleanTel.length < 10) continue;
+
+      let nomeExtraido = linha
+        .replace(rawTel, '')
+        .replace(/^[-\s,:;|•/]+|[-\s,:;|•/]+$/g, '')
+        .trim();
+
+      let dataNasc = '';
+      const matchNasc = nomeExtraido.match(/\b(0?[1-9]|[12][0-9]|3[01])[\/\-](0?[1-9]|1[012])(?:[\/\-](19\d\d|20\d\d))?\b/);
+      if (matchNasc) {
+        dataNasc = matchNasc[0];
+        nomeExtraido = nomeExtraido.replace(matchNasc[0], '').replace(/^[-\s,:;|•/]+|[-\s,:;|•/]+$/g, '').trim();
+      }
+
+      if (!nomeExtraido || nomeExtraido.length < 2) {
+        nomeExtraido = `Cliente ${cleanTel.slice(-4)}`;
+      }
+
+      if (telefonesVistosNesteLote.has(cleanTel)) continue;
+      telefonesVistosNesteLote.add(cleanTel);
+
+      const jaExiste = telefonesExistentes.has(cleanTel);
+
+      parsed.push({
+        idTemp: `prev-${i}-${Date.now()}`,
+        nome: nomeExtraido,
+        telefone: cleanTel,
+        telefoneFormatado: formatarTelefoneVisual(cleanTel),
+        dataNascimento: dataNasc,
+        jaExiste,
+        selecionado: !jaExiste
+      });
+    }
+
+    setContatosPreview(parsed);
+  };
+
+  const handleLerArquivo = async (file: File) => {
+    setNomeArquivoCarregado(file.name);
+    const content = await file.text();
+
+    if (file.name.toLowerCase().endsWith('.vcf')) {
+      const cartoes = content.split(/BEGIN:VCARD/i).filter(c => c.includes('END:VCARD'));
+      const parsed: ContatoImportadoPreview[] = [];
+      const telefonesExistentes = new Set(clientes.map(c => c.telefone.replace(/\D/g, '')));
+      const telefonesVistos = new Set<string>();
+
+      cartoes.forEach((card, idx) => {
+        let nome = '';
+        let tel = '';
+        let bday = '';
+
+        const fnMatch = card.match(/FN(?:;[^:]*)?:([^\r\n]+)/i);
+        if (fnMatch) nome = fnMatch[1].trim();
+
+        if (!nome) {
+          const nMatch = card.match(/N(?:;[^:]*)?:([^\r\n]+)/i);
+          if (nMatch) {
+            const parts = nMatch[1].split(';').filter(Boolean);
+            nome = parts.reverse().join(' ').trim();
+          }
+        }
+
+        const telMatch = card.match(/TEL(?:;[^:]*)?:([^\r\n]+)/i);
+        if (telMatch) tel = telMatch[1].replace(/\D/g, '');
+
+        const bdayMatch = card.match(/BDAY(?:;[^:]*)?:([^\r\n]+)/i);
+        if (bdayMatch) bday = bdayMatch[1].trim();
+
+        if (tel.length === 10 || tel.length === 11) {
+          tel = `55${tel}`;
+        }
+
+        if (tel.length >= 10 && !telefonesVistos.has(tel)) {
+          telefonesVistos.add(tel);
+          const jaExiste = telefonesExistentes.has(tel);
+          parsed.push({
+            idTemp: `vcf-${idx}`,
+            nome: nome || `Contato ${tel.slice(-4)}`,
+            telefone: tel,
+            telefoneFormatado: formatarTelefoneVisual(tel),
+            dataNascimento: bday,
+            jaExiste,
+            selecionado: !jaExiste
+          });
+        }
+      });
+
+      setContatosPreview(parsed);
+    } else {
+      processarTextoParaPreview(content);
+    }
+  };
+
+  const handleSalvarContatosLote = async () => {
+    const selecionados = contatosPreview.filter(c => c.selecionado);
+    if (selecionados.length === 0) {
+      alert("Nenhum contato selecionado para importação.");
+      return;
+    }
+
+    setSalvandoLote(true);
+    setResultadoImportacao(null);
+
+    try {
+      const res = await fetch('/api/clientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'importar_lote',
+          clientes: selecionados.map(s => ({
+            nome: s.nome,
+            telefone: s.telefone,
+            dataNascimento: s.dataNascimento || '',
+            endereco: s.endereco || '',
+            observacoes: 'Importado da lista de contatos do WhatsApp'
+          }))
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.sucesso) {
+        setResultadoImportacao({
+          sucesso: true,
+          mensagem: `🎉 ${data.importados} ${data.importados === 1 ? 'cliente importada' : 'clientes importadas'} com sucesso!${data.duplicadosIgnorados > 0 ? ` (${data.duplicadosIgnorados} duplicados ignorados)` : ''}`
+        });
+
+        if (onRecarregarClientes) {
+          onRecarregarClientes();
+        }
+
+        setTimeout(() => {
+          setModalImportarAberto(false);
+          setContatosPreview([]);
+          setTextoColado('');
+          setResultadoImportacao(null);
+        }, 2200);
+      } else {
+        setResultadoImportacao({
+          sucesso: false,
+          mensagem: data.error || 'Erro ao importar contatos.'
+        });
+      }
+    } catch {
+      setResultadoImportacao({
+        sucesso: false,
+        mensagem: 'Erro de conexão ao salvar no banco de dados.'
+      });
+    } finally {
+      setSalvandoLote(false);
+    }
+  };
 
   const mesAtual = new Date().getMonth() + 1; // 1 a 12
   const diaHoje = new Date().getDate();
@@ -347,8 +572,21 @@ export function ClientesTab({ clientes, onNovoCliente, onEditarCliente }: Client
           </button>
 
           <button
+            onClick={() => {
+              setModalImportarAberto(true);
+              setResultadoImportacao(null);
+            }}
+            className="ml-auto sm:ml-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 flex-shrink-0 shadow-sm shadow-emerald-600/30"
+            title="Importar lista de contatos do WhatsApp ou arquivo CSV/vCard"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Importar WhatsApp</span>
+            <span className="sm:hidden">Importar</span>
+          </button>
+
+          <button
             onClick={() => abrirModalCadastro()}
-            className="ml-auto sm:ml-2 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1 flex-shrink-0 shadow-sm"
+            className="bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1 flex-shrink-0 shadow-sm border border-slate-700"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Nova Cliente</span>
@@ -725,6 +963,270 @@ export function ClientesTab({ clientes, onNovoCliente, onEditarCliente }: Client
                 Salvar Ficha da Cliente ✨
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Importação de Contatos do WhatsApp */}
+      {modalImportarAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden animate-fade-in">
+            {/* Topo do Modal */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-500/20">
+                  <Download className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                    Importar Contatos do WhatsApp
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Traga suas clientes antigas e contatos do WhatsApp para o CRM e Clube de Aniversariantes.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setModalImportarAberto(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Abas: Colar Texto vs Arquivo */}
+            <div className="px-4 sm:px-5 pt-3">
+              <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setAbaImportacao('colar')}
+                  className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
+                    abaImportacao === 'colar'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                  <span>1. Colar Lista de Nomes e Telefones</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAbaImportacao('arquivo')}
+                  className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
+                    abaImportacao === 'arquivo'
+                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>2. Subir Arquivo (.vcf ou .csv)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Conteúdo com Scroll */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+              {abaImportacao === 'colar' ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Cole sua lista abaixo (do WhatsApp, Bloco de Notas ou Excel):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const exemplo = `Mariana Silva - (11) 98765-4321\nCamila Ferreira, 11999998888, 15/04\nFernanda Lima: 5511988881234\nJuliana Santos - 11 91234-5678 - Bela Vista\nBeatriz Rocha (11) 97777-6666`;
+                        setTextoColado(exemplo);
+                        processarTextoParaPreview(exemplo);
+                      }}
+                      className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                    >
+                      Preencher Exemplo
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={6}
+                    placeholder={`Cole aqui as linhas com nomes e telefones, por exemplo:\nMariana Silva - (11) 98765-4321\nCamila Ferreira, 11999998888, 15/04\nFernanda Lima: 5511988881234`}
+                    value={textoColado}
+                    onChange={(e) => {
+                      setTextoColado(e.target.value);
+                      processarTextoParaPreview(e.target.value);
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 text-xs font-mono text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed"
+                  />
+
+                  <p className="text-[11px] text-slate-400">
+                    💡 O sistema reconhece automaticamente qualquer formato de telefone brasileiro com DDD (com ou sem traço, parênteses ou +55).
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-3xl p-6 text-center hover:border-emerald-500 transition-colors bg-slate-50/50 dark:bg-slate-800/30">
+                    <Upload className="w-10 h-10 text-emerald-600 dark:text-emerald-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Selecione um arquivo de contatos (.vcf ou .csv)
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                      Você pode exportar contatos do seu celular (iPhone ou Android) em formato vCard (.vcf) ou exportar do Google Contatos em .csv.
+                    </p>
+
+                    <label className="mt-3.5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Escolher Arquivo do Computador</span>
+                      <input
+                        type="file"
+                        accept=".vcf,.csv,.txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleLerArquivo(file);
+                        }}
+                      />
+                    </label>
+
+                    {nomeArquivoCarregado && (
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold mt-2">
+                        📄 Arquivo carregado: {nomeArquivoCarregado}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Pré-visualização dos Contatos Detectados */}
+              {contatosPreview.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  {/* Cards de Resumo */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] text-slate-400 block font-semibold uppercase">Total Encontrados</span>
+                      <span className="text-base font-extrabold text-slate-800 dark:text-white">
+                        {contatosPreview.length}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800">
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-300 block font-semibold uppercase">Prontos p/ Importar</span>
+                      <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                        {contatosPreview.filter(c => c.selecionado && !c.jaExiste).length}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800">
+                      <span className="text-[10px] text-amber-700 dark:text-amber-300 block font-semibold uppercase">Já Cadastrados</span>
+                      <span className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                        {contatosPreview.filter(c => c.jaExiste).length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Lista de Contatos */}
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                    {contatosPreview.map((item) => (
+                      <div
+                        key={item.idTemp}
+                        className={`p-2.5 flex items-center justify-between gap-2.5 transition ${
+                          item.jaExiste 
+                            ? 'bg-slate-50/50 dark:bg-slate-800/30 opacity-60' 
+                            : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            disabled={item.jaExiste}
+                            checked={item.selecionado}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setContatosPreview(prev => prev.map(p => p.idTemp === item.idTemp ? { ...p, selecionado: checked } : p));
+                            }}
+                            className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer disabled:opacity-40"
+                          />
+
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 dark:text-white truncate">
+                              {item.nome}
+                            </p>
+                            <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                              {item.telefoneFormatado}
+                              {item.dataNascimento && (
+                                <span className="ml-2 font-sans text-pink-600 dark:text-pink-400 font-semibold">
+                                  🎂 {item.dataNascimento}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          {item.jaExiste ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                              Já Cadastrada
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                              Nova Cliente ✨
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Mensagem de Feedback */}
+              {resultadoImportacao && (
+                <div className={`p-3 rounded-2xl text-xs flex items-center gap-2 animate-fade-in ${
+                  resultadoImportacao.sucesso
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700'
+                    : 'bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-700'
+                }`}>
+                  {resultadoImportacao.sucesso ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  )}
+                  <span className="font-bold">{resultadoImportacao.mensagem}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-900/50">
+              <button
+                type="button"
+                onClick={() => setModalImportarAberto(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSalvarContatosLote}
+                disabled={salvandoLote || contatosPreview.filter(c => c.selecionado).length === 0}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-bold text-xs flex items-center gap-2 transition shadow-md shadow-emerald-600/20 disabled:opacity-40 cursor-pointer"
+              >
+                {salvandoLote ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Importando Contatos...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>
+                      Importar {contatosPreview.filter(c => c.selecionado).length}{' '}
+                      {contatosPreview.filter(c => c.selecionado).length === 1 ? 'Contato' : 'Contatos'} para o Studio
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

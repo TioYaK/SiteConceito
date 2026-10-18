@@ -11,6 +11,7 @@ export async function GET() {
     horarioAbertura: db.configuracoes.horarioAbertura || "09:00",
     horarioFechamento: db.configuracoes.horarioFechamento || "19:00",
     frete: db.configuracoes.frete,
+    endereco: db.configuracoes.endereco,
     mercadoPagoAtivo: db.configuracoes.mercadoPagoAtivo || false,
     servicos: db.servicos.filter(s => s.ativo),
     produtos: db.estoque.filter(e => e.tipo === 'venda_balcao')

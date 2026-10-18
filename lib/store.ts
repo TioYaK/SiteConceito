@@ -113,6 +113,18 @@ export interface FreteConfig {
   permiteCorreios: boolean;
 }
 
+export interface EnderecoStudio {
+  logradouro: string;
+  numero: string;
+  complemento?: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  pontoReferencia?: string;
+  linkMaps?: string;
+}
+
 export interface Configuracoes {
   nomeEmpresa: string;
   telefoneWhatsApp: string;
@@ -124,6 +136,7 @@ export interface Configuracoes {
   horarioFechamento: string;
   iaAtiva: boolean;
   promptRecepcionista: string;
+  endereco?: EnderecoStudio;
   frete: FreteConfig;
   geminiApiKey?: string;
   modeloGemini?: string;
@@ -178,9 +191,20 @@ const INITIAL_DATA: AppData = {
     horarioFechamento: "19:00",
     iaAtiva: true,
     promptRecepcionista: "Você é a Manu, recepcionista virtual inteligente e concierge de beleza do Studio Bruna Meireles. Atenda com simpatia no WhatsApp, tire dúvidas sobre extensão de cílios, sobrancelhas e estética facial, veja horários livres na agenda e cobre o sinal de PIX para garantir a vaga da profissional.",
+    endereco: {
+      logradouro: "Rua Augusta",
+      numero: "1500",
+      complemento: "Sala 32",
+      bairro: "Consolação",
+      cidade: "São Paulo",
+      estado: "SP",
+      cep: "01304-001",
+      pontoReferencia: "Próximo à estação Consolação do Metrô (Linha Verde)",
+      linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
+    },
     frete: {
       taxaMotoboy: 15.00,
-      cepOrigem: "01310-100",
+      cepOrigem: "01304-001",
       cidadeOrigem: "São Paulo",
       estadoOrigem: "SP",
       freteGratisAcimaDe: 150.00,
@@ -330,6 +354,10 @@ export function getDbSync(): AppData {
     }
     if (!data.configuracoes.frete) {
       data.configuracoes.frete = INITIAL_DATA.configuracoes.frete;
+      modified = true;
+    }
+    if (!data.configuracoes.endereco) {
+      data.configuracoes.endereco = INITIAL_DATA.configuracoes.endereco;
       modified = true;
     }
     if (modified) {

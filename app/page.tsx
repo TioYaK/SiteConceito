@@ -40,7 +40,7 @@ export default function Home() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>({
-    nomeEmpresa: "Studio & Estética Facial",
+    nomeEmpresa: "Studio Bruna Meireles",
     telefoneWhatsApp: "5511987654321",
     statusWhatsApp: "conectado",
     chavePix: "11987654321",
@@ -50,9 +50,20 @@ export default function Home() {
     horarioFechamento: "19:00",
     iaAtiva: true,
     promptRecepcionista: "",
+    endereco: {
+      logradouro: "Rua Augusta",
+      numero: "1500",
+      complemento: "Sala 32",
+      bairro: "Consolação",
+      cidade: "São Paulo",
+      estado: "SP",
+      cep: "01304-001",
+      pontoReferencia: "Próximo à estação Consolação do Metrô",
+      linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
+    },
     frete: {
       taxaMotoboy: 15.00,
-      cepOrigem: "01310-100",
+      cepOrigem: "01304-001",
       cidadeOrigem: "São Paulo",
       estadoOrigem: "SP",
       freteGratisAcimaDe: 150.00,
@@ -144,6 +155,7 @@ export default function Home() {
           sinalPadrao: dataWpp.sinalPadrao || prev.sinalPadrao,
           iaAtiva: dataWpp.iaAtiva ?? prev.iaAtiva,
           promptRecepcionista: dataWpp.prompt || prev.promptRecepcionista,
+          endereco: dataWpp.endereco || prev.endereco,
           frete: dataWpp.frete || prev.frete,
           geminiApiKey: dataWpp.geminiApiKey ?? prev.geminiApiKey,
           modeloGemini: dataWpp.modeloGemini ?? prev.modeloGemini
@@ -434,6 +446,7 @@ export default function Home() {
             clientes={clientes}
             onNovoCliente={handleNovoCliente}
             onEditarCliente={handleEditarCliente}
+            onRecarregarClientes={carregarDados}
           />
         )}
 

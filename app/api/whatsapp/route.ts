@@ -34,15 +34,34 @@ async function gerarRespostaGemini(
 
     const frete = db.configuracoes.frete || {
       taxaMotoboy: 15.0,
-      cepOrigem: "01310-100",
+      cepOrigem: "01304-001",
       cidadeOrigem: "São Paulo",
       estadoOrigem: "SP",
       freteGratisAcimaDe: 150.0
     };
 
+    const endereco = db.configuracoes.endereco || {
+      logradouro: "Rua Augusta",
+      numero: "1500",
+      complemento: "Sala 32",
+      bairro: "Consolação",
+      cidade: "São Paulo",
+      estado: "SP",
+      cep: "01304-001",
+      pontoReferencia: "Próximo à estação Consolação do Metrô (Linha Verde)",
+      linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
+    };
+
     const promptSistema = `
 Você é a Manu, recepcionista virtual inteligente, simpática e concierge de beleza do '${db.configuracoes.nomeEmpresa}'.
 Data de hoje: ${hojeStr}. Horário de atendimento do Studio: das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}.
+
+ENDEREÇO FÍSICO DO STUDIO:
+- Logradouro: ${endereco.logradouro}, nº ${endereco.numero} ${endereco.complemento ? `(${endereco.complemento})` : ''}
+- Bairro: ${endereco.bairro} - ${endereco.cidade}/${endereco.estado} (CEP: ${endereco.cep})
+- Ponto de Referência: ${endereco.pontoReferencia || 'Próximo ao metrô'}
+- Como chegar / Google Maps: ${endereco.linkMaps || 'https://maps.google.com'}
+- Se a cliente perguntar onde fica o studio, qual o endereço, como chegar, localização ou ponto de referência: passe o endereço exato com carinho e o link do Google Maps para ela traçar a rota!
 
 HORÁRIOS JÁ OCUPADOS:
 - Hoje (${hojeStr}): ${agendamentosOcupadosHoje.length > 0 ? agendamentosOcupadosHoje.join(', ') : 'Todos os horários livres'}
@@ -74,7 +93,7 @@ FORMAS DE PAGAMENTO ACEITAS:
 - Cartão de Crédito em até 12x (online via Mercado Pago ou na maquininha do studio no dia do atendimento)
 
 REGRAS DE ENTREGA E FRETE:
-- Retirada no Studio: GRÁTIS (Rua Augusta, pronta em 1 hora).
+- Retirada no Studio: GRÁTIS (${endereco.logradouro}, nº ${endereco.numero}, pronta em 1 hora).
 - Motoboy Express: R$ ${frete.taxaMotoboy.toFixed(2)} (mesmo dia para ${frete.cidadeOrigem}), ou GRÁTIS em compras acima de R$ ${frete.freteGratisAcimaDe.toFixed(2)}.
 - Sedex / PAC dos Correios para outras cidades/estados.
 
@@ -328,14 +347,52 @@ function gerarRespostaRecepcionista(
     return false;
   });
 
+  // 0. CONSULTA DE ENDEREÇO / LOCALIZAÇÃO (ex: "onde fica o estúdio?", "qual o endereço?", "como chego aí?")
+  const ehPerguntaEndereco = 
+    clean.includes('onde fica') || 
+    clean.includes('qual o endereco') || 
+    clean.includes('qual endereco') ||
+    clean.includes('como chego') || 
+    clean.includes('localizacao') || 
+    clean.includes('ponto de referencia') || 
+    clean.includes('onde voces estao') || 
+    clean.includes('qual a rua') ||
+    clean.includes('onde e o studio') ||
+    clean.includes('qual o ponto') ||
+    clean.includes('perto de onde');
+
+  if (ehPerguntaEndereco) {
+    const end = db.configuracoes.endereco || {
+      logradouro: "Rua Augusta",
+      numero: "1500",
+      complemento: "Sala 32",
+      bairro: "Consolação",
+      cidade: "São Paulo",
+      estado: "SP",
+      cep: "01304-001",
+      pontoReferencia: "Próximo à estação Consolação do Metrô",
+      linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
+    };
+
+    const ref = end.pontoReferencia ? `\n📍 *Ponto de referência:* ${end.pontoReferencia}` : '';
+    const maps = end.linkMaps ? `\n🗺️ *Ver no Google Maps:* ${end.linkMaps}` : '';
+
+    return {
+      respostaBot: `Olá, ${clienteNome}! 🌸 O *${db.configuracoes.nomeEmpresa}* fica localizado em um espaço super confortável, sofisticado e seguro:\n\n🏢 *Endereço:* ${end.logradouro}, nº ${end.numero} ${end.complemento ? `(${end.complemento})` : ''}\n🏙️ *Bairro:* ${end.bairro} - ${end.cidade}/${end.estado} (CEP: ${end.cep})${ref}${maps}\n\nAtendemos de segunda a sábado das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento} com horário reservado. Gostaria de marcar um horário para vir nos conhecer? ✨`,
+      agendamentoCriado: null
+    };
+  }
+
   // 1. CONSULTA DE FRETE / CEP (ex: "quanto é o frete pro CEP 01304-001?", "calcula frete 04538133")
   const matchCep = clean.match(/\b\d{5}-?\d{3}\b/);
   if (matchCep || ((clean.includes('frete') || clean.includes('entrega') || clean.includes('motoboy')) && clean.includes('cep'))) {
     const cepEncontrado = matchCep ? matchCep[0] : 'seu CEP';
     const taxaMotoboy = db.configuracoes.frete?.taxaMotoboy || 15.00;
+    const end = db.configuracoes.endereco;
+    const localRetirada = end ? `${end.logradouro}, nº ${end.numero}` : 'Rua Augusta, 1500';
 
     return {
-      respostaBot: `Olá, ${clienteNome}! 🛵✨ Consultei para o CEP *${cepEncontrado}*:\n\n1️⃣ *🛵 Motoboy Express (Mesmo Dia):* R$ ${formatarReal(taxaMotoboy)} (entrega hoje até as 18h no seu endereço)\n2️⃣ *📦 Sedex Correios:* R$ 18,50 (1 a 2 dias úteis)\n3️⃣ *🏪 Retirada no Studio:* *GRÁTIS* (Rua Augusta, pronto em 1 hora)\n\nQual dessas opções você prefere para o seu pedido?`,
+      respostaBot: `Olá, ${clienteNome}! 🛵✨ Consultei para o CEP *${cepEncontrado}*:\n\n1️⃣ *🛵 Motoboy Express (Mesmo Dia):* R$ ${formatarReal(taxaMotoboy)} (entrega hoje até as 18h no seu endereço)\n2️⃣ *📦 Sedex Correios:* R$ 18,50 (1 a 2 dias úteis)\n3️⃣ *🏪 Retirada no Studio:* *GRÁTIS* (${localRetirada}, pronto em 1 hora)\n\nQual dessas opções você prefere para o seu pedido?`,
       agendamentoCriado: null
     };
   }
@@ -579,6 +636,7 @@ export async function GET() {
     nomeEmpresa: db.configuracoes.nomeEmpresa,
     chavePix: db.configuracoes.chavePix,
     sinalPadrao: db.configuracoes.sinalPadrao,
+    endereco: db.configuracoes.endereco,
     frete: db.configuracoes.frete,
     geminiApiKey: apiKey,
     modeloGemini: db.configuracoes.modeloGemini || "gemini-1.5-flash",
@@ -603,6 +661,13 @@ export async function POST(request: Request) {
       if (body.chavePix) db.configuracoes.chavePix = body.chavePix;
       if (body.sinalPadrao !== undefined) db.configuracoes.sinalPadrao = Number(body.sinalPadrao);
       if (body.promptRecepcionista) db.configuracoes.promptRecepcionista = body.promptRecepcionista;
+      if (body.endereco) {
+        db.configuracoes.endereco = { ...(db.configuracoes.endereco || {}), ...body.endereco };
+        // Sincroniza dados de origem do frete automaticamente com o endereço do estúdio
+        if (body.endereco.cep) db.configuracoes.frete.cepOrigem = body.endereco.cep;
+        if (body.endereco.cidade) db.configuracoes.frete.cidadeOrigem = body.endereco.cidade;
+        if (body.endereco.estado) db.configuracoes.frete.estadoOrigem = body.endereco.estado;
+      }
       if (body.frete) db.configuracoes.frete = { ...db.configuracoes.frete, ...body.frete };
       if (body.geminiApiKey !== undefined) db.configuracoes.geminiApiKey = body.geminiApiKey;
       if (body.modeloGemini !== undefined) db.configuracoes.modeloGemini = body.modeloGemini;

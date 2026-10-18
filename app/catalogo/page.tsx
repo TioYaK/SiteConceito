@@ -58,6 +58,17 @@ interface CatalogoData {
     estadoOrigem: string;
     freteGratisAcimaDe: number;
   };
+  endereco?: {
+    logradouro: string;
+    numero: string;
+    complemento?: string;
+    bairro: string;
+    cidade: string;
+    estado: string;
+    cep: string;
+    pontoReferencia?: string;
+    linkMaps?: string;
+  };
   mercadoPagoAtivo: boolean;
   servicos: Servico[];
   produtos: ItemEstoque[];
@@ -265,16 +276,30 @@ export default function CatalogoPublicoPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 text-[11px] text-emerald-200/80 mt-1">
+              <div className="flex items-center gap-2 text-[11px] text-emerald-200/90 mt-1 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-amber-300" />
+                  <Clock className="w-3.5 h-3.5 text-amber-300" />
                   {dados?.horarioAbertura || '09:00'} às {dados?.horarioFechamento || '19:00'}
                 </span>
                 <span>•</span>
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-emerald-400" />
-                  {dados?.frete?.cidadeOrigem || 'São Paulo'} - {dados?.frete?.estadoOrigem || 'SP'}
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                  {dados?.endereco 
+                    ? `${dados.endereco.logradouro}, ${dados.endereco.numero} - ${dados.endereco.bairro}`
+                    : `${dados?.frete?.cidadeOrigem || 'São Paulo'} - ${dados?.frete?.estadoOrigem || 'SP'}`}
                 </span>
+                {dados?.endereco?.linkMaps && (
+                  <a
+                    href={dados.endereco.linkMaps}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 text-[10px] text-amber-300 hover:underline font-bold bg-white/10 px-1.5 py-0.5 rounded cursor-pointer"
+                    title="Ver localização no Google Maps"
+                  >
+                    <span>Ver Mapa</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -583,17 +608,90 @@ export default function CatalogoPublicoPage() {
         {/* ABA 3: SIMULADOR DE ENTREGA E FRETE */}
         {abaAtiva === 'frete' && (
           <div className="space-y-4">
+            {/* Card Endereço Físico e Retirada Grátis */}
+            <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-slate-900/5 dark:from-emerald-950/40 dark:via-teal-950/20 dark:to-slate-900/40 rounded-3xl p-5 border border-emerald-200/60 dark:border-emerald-800/60 shadow-sm space-y-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-600/30">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                        Retirada no Studio • Grátis
+                      </h3>
+                      <span className="text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                        Pronto em 1h
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Você pode retirar seus produtos ou vir para o seu atendimento presencial.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs space-y-1.5 shadow-sm">
+                <p className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <span>📍 Endereço do Studio:</span>
+                </p>
+                <p className="text-slate-700 dark:text-slate-300">
+                  {dados?.endereco ? (
+                    <>
+                      <strong>{dados.endereco.logradouro}, nº {dados.endereco.numero}</strong>
+                      {dados.endereco.complemento ? ` (${dados.endereco.complemento})` : ''} • {dados.endereco.bairro}
+                      <br />
+                      {dados.endereco.cidade} - {dados.endereco.estado} • CEP: {dados.endereco.cep}
+                    </>
+                  ) : (
+                    'Rua Augusta, 1500, Sala 32 • Consolação, São Paulo - SP'
+                  )}
+                </p>
+
+                {dados?.endereco?.pontoReferencia && (
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium pt-0.5">
+                    ✨ <strong>Referência:</strong> {dados.endereco.pontoReferencia}
+                  </p>
+                )}
+
+                <div className="pt-2 flex items-center gap-2 flex-wrap">
+                  {dados?.endereco?.linkMaps && (
+                    <a
+                      href={dados.endereco.linkMaps}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>Traçar Rota (Google Maps)</span>
+                      <ExternalLink className="w-3 h-3 text-emerald-200" />
+                    </a>
+                  )}
+
+                  <a
+                    href={criarLinkWhatsApp(`Olá Manu! 🌸 Quero saber como chegar ao Studio para o meu agendamento / retirada de produto!`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>Dúvidas de Localização</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shadow-indigo-600/30">
                   <Calculator className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                    Calcular Entrega para Sua Casa
+                    Calcular Frete para Sua Casa (Motoboy &amp; Correios)
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Consulte valores de Motoboy Express e Correios
+                    Mesmo dia por Motoboy Express para {dados?.frete?.cidadeOrigem || 'São Paulo'} ou Sedex para todo o Brasil
                   </p>
                 </div>
               </div>

@@ -20,7 +20,11 @@ import {
   CheckCircle2,
   Zap,
   CreditCard,
-  Lock
+  Lock,
+  MapPin,
+  Compass,
+  Navigation,
+  Truck
 } from 'lucide-react';
 import { Configuracoes } from '@/lib/store';
 
@@ -66,6 +70,24 @@ export function RecepcionistaTab({
   const [testandoMp, setTestandoMp] = useState(false);
   const [resultadoTesteMp, setResultadoTesteMp] = useState<{ sucesso: boolean; mensagem?: string; erro?: string } | null>(null);
   const [salvandoMp, setSalvandoMp] = useState(false);
+
+  // Estados do Endereço do Studio
+  const [logradouroInput, setLogradouroInput] = useState(configuracoes.endereco?.logradouro || 'Rua Augusta');
+  const [numeroInput, setNumeroInput] = useState(configuracoes.endereco?.numero || '1500');
+  const [complementoInput, setComplementoInput] = useState(configuracoes.endereco?.complemento || 'Sala 32');
+  const [bairroInput, setBairroInput] = useState(configuracoes.endereco?.bairro || 'Consolação');
+  const [cidadeInput, setCidadeInput] = useState(configuracoes.endereco?.cidade || 'São Paulo');
+  const [estadoInput, setEstadoInput] = useState(configuracoes.endereco?.estado || 'SP');
+  const [cepInput, setCepInput] = useState(configuracoes.endereco?.cep || '01304-001');
+  const [pontoReferenciaInput, setPontoReferenciaInput] = useState(configuracoes.endereco?.pontoReferencia || 'Próximo à estação Consolação do Metrô (Linha Verde)');
+  const [linkMapsInput, setLinkMapsInput] = useState(configuracoes.endereco?.linkMaps || 'https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP');
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [salvandoEndereco, setSalvandoEndereco] = useState(false);
+  const [enderecoSalvoComSucesso, setEnderecoSalvoComSucesso] = useState(false);
+
+  // Estados do Frete
+  const [taxaMotoboyInput, setTaxaMotoboyInput] = useState(String(configuracoes.frete?.taxaMotoboy ?? 15));
+  const [freteGratisAcimaDeInput, setFreteGratisAcimaDeInput] = useState(String(configuracoes.frete?.freteGratisAcimaDe ?? 150));
 
   // Chat Simulador
   const [mensagens, setMensagens] = useState<MensagemChat[]>([
@@ -186,6 +208,70 @@ export function RecepcionistaTab({
     } finally {
       setSalvandoMp(false);
     }
+  };
+
+  const handleBuscarCepStudio = async () => {
+    const clean = cepInput.replace(/\D/g, '');
+    if (clean.length !== 8) {
+      alert("Digite um CEP válido com 8 números.");
+      return;
+    }
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        if (data.logradouro) setLogradouroInput(data.logradouro);
+        if (data.bairro) setBairroInput(data.bairro);
+        if (data.localidade) setCidadeInput(data.localidade);
+        if (data.uf) setEstadoInput(data.uf);
+        const queryMaps = encodeURIComponent(`${data.logradouro || ''}, ${data.bairro || ''}, ${data.localidade || ''} - ${data.uf || ''}`);
+        setLinkMapsInput(`https://maps.google.com/?q=${queryMaps}`);
+      } else {
+        alert("CEP não encontrado.");
+      }
+    } catch {
+      alert("Falha ao consultar o CEP.");
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
+
+  const handleSalvarEndereco = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSalvandoEndereco(true);
+    const taxaMoto = parseFloat(taxaMotoboyInput.replace(',', '.')) || 15;
+    const freteGratis = parseFloat(freteGratisAcimaDeInput.replace(',', '.')) || 150;
+
+    const queryMaps = linkMapsInput.trim() || `https://maps.google.com/?q=${encodeURIComponent(`${logradouroInput}, ${numeroInput} - ${bairroInput}, ${cidadeInput} - ${estadoInput}`)}`;
+
+    onSalvarConfig({
+      endereco: {
+        logradouro: logradouroInput.trim(),
+        numero: numeroInput.trim(),
+        complemento: complementoInput.trim(),
+        bairro: bairroInput.trim(),
+        cidade: cidadeInput.trim(),
+        estado: estadoInput.trim().toUpperCase(),
+        cep: cepInput.trim(),
+        pontoReferencia: pontoReferenciaInput.trim(),
+        linkMaps: queryMaps
+      },
+      frete: {
+        ...configuracoes.frete,
+        taxaMotoboy: taxaMoto,
+        freteGratisAcimaDe: freteGratis,
+        cepOrigem: cepInput.trim(),
+        cidadeOrigem: cidadeInput.trim(),
+        estadoOrigem: estadoInput.trim().toUpperCase()
+      }
+    });
+
+    setTimeout(() => {
+      setSalvandoEndereco(false);
+      setEnderecoSalvoComSucesso(true);
+      setTimeout(() => setEnderecoSalvoComSucesso(false), 3000);
+    }, 400);
   };
 
   const handleEnviarMensagem = async (textoParaEnviar?: string) => {
@@ -675,6 +761,250 @@ export function RecepcionistaTab({
         </form>
       </div>
 
+      {/* CARD ENDEREÇO FÍSICO DO STUDIO & FRETE */}
+      <div className="bg-gradient-to-br from-emerald-900/10 via-teal-900/5 to-slate-900/10 dark:from-emerald-950/40 dark:via-teal-950/20 dark:to-slate-950/30 rounded-3xl p-5 border border-emerald-200/60 dark:border-emerald-800/60 shadow-sm space-y-4 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-amber-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 flex-shrink-0">
+              <MapPin className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
+                  Endereço Físico do Studio & Frete
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                  📍 Ativo no Catálogo e IA
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Configuração da sua localização física para a Manu (IA) informar clientes e calcular entregas por motoboy e correios.
+              </p>
+            </div>
+          </div>
+
+          {linkMapsInput && (
+            <a
+              href={linkMapsInput}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="self-start sm:self-center px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <span>Abrir no Google Maps</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+
+        {/* Formulário de Endereço e Frete */}
+        <form onSubmit={handleSalvarEndereco} className="space-y-3.5 pt-1">
+          {/* Linha 1: CEP e Busca Automática */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                CEP do Studio:
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  required
+                  placeholder="00000-000"
+                  value={cepInput}
+                  onChange={(e) => setCepInput(e.target.value)}
+                  className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm font-mono text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleBuscarCepStudio}
+                  disabled={buscandoCep}
+                  className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+                  title="Preencher rua e bairro automaticamente pelo CEP"
+                >
+                  {buscandoCep ? 'Buscando...' : 'Buscar'}
+                </button>
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Rua / Avenida (Logradouro):
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Rua Augusta"
+                value={logradouroInput}
+                onChange={(e) => setLogradouroInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Linha 2: Número, Complemento e Bairro */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Número:
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: 1500"
+                value={numeroInput}
+                onChange={(e) => setNumeroInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Complemento (opcional):
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Sala 32, 3º andar"
+                value={complementoInput}
+                onChange={(e) => setComplementoInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Bairro:
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Consolação"
+                value={bairroInput}
+                onChange={(e) => setBairroInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Cidade - UF:
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  required
+                  placeholder="Cidade"
+                  value={cidadeInput}
+                  onChange={(e) => setCidadeInput(e.target.value)}
+                  className="w-3/4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <input
+                  type="text"
+                  required
+                  maxLength={2}
+                  placeholder="UF"
+                  value={estadoInput}
+                  onChange={(e) => setEstadoInput(e.target.value.toUpperCase())}
+                  className="w-1/4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs sm:text-sm text-center uppercase font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Linha 3: Ponto de Referência e Link do Google Maps */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Ponto de Referência (para a IA explicar):
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Próximo ao Metrô Consolação / Em frente à farmácia"
+                value={pontoReferenciaInput}
+                onChange={(e) => setPontoReferenciaInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Link do Google Maps / Waze:
+              </label>
+              <input
+                type="text"
+                placeholder="https://maps.google.com/?q=..."
+                value={linkMapsInput}
+                onChange={(e) => setLinkMapsInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Linha 4: Taxas de Frete */}
+          <div className="p-3.5 rounded-2xl bg-white/70 dark:bg-slate-900/70 border border-emerald-100 dark:border-emerald-900/50 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                🛵 Taxa Fixa de Motoboy Express (R$):
+              </label>
+              <input
+                type="text"
+                placeholder="15,00"
+                value={taxaMotoboyInput}
+                onChange={(e) => setTaxaMotoboyInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Valor cobrado para entregas no mesmo dia na sua cidade.
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                ✨ Frete Grátis em Compras Acima de (R$):
+              </label>
+              <input
+                type="text"
+                placeholder="150,00"
+                value={freteGratisAcimaDeInput}
+                onChange={(e) => setFreteGratisAcimaDeInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Incentivo para aumentar o ticket médio nas compras do catálogo.
+              </span>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <span className="text-[11px] text-slate-400 italic">
+              O endereço atualiza automaticamente no Catálogo da Bio e nas respostas da Manu no WhatsApp!
+            </span>
+
+            <button
+              type="submit"
+              disabled={salvandoEndereco}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {salvandoEndereco ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Salvando Endereço...</span>
+                </>
+              ) : enderecoSalvoComSucesso ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="text-emerald-100">Endereço Salvo com Sucesso!</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Salvar Endereço &amp; Frete</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
       {/* Simulador ao Vivo do WhatsApp */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden transition-colors">
         {/* Barra Superior WhatsApp */}
@@ -743,6 +1073,12 @@ export function RecepcionistaTab({
           <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase whitespace-nowrap pl-1">
             Testar:
           </span>
+          <button
+            onClick={() => handleEnviarMensagem('Onde fica o estúdio de vocês? Qual o endereço?')}
+            className="whitespace-nowrap bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] px-3 py-1.5 rounded-full transition cursor-pointer shadow-sm font-semibold text-emerald-700 dark:text-emerald-300"
+          >
+            "📍 Onde fica o estúdio?"
+          </button>
           <button
             onClick={() => handleEnviarMensagem('quanto sai brow e micro e limpeza de pele')}
             className="whitespace-nowrap bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 text-[11px] px-3 py-1.5 rounded-full transition cursor-pointer shadow-sm"
