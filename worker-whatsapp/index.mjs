@@ -206,12 +206,23 @@ async function iniciarWhatsApp() {
         }
 
         // Extrair texto da mensagem
-        const texto =
+        let texto =
           msg.message?.conversation ||
           msg.message?.extendedTextMessage?.text ||
           msg.message?.imageMessage?.caption ||
           msg.message?.videoMessage?.caption ||
           '';
+
+        // Suporte inteligente para mídias: Áudios, Fotos/Comprovantes, Figurinhas e Documentos
+        if (msg.message?.imageMessage) {
+          texto = texto ? `[CLIENTE_ENVIOU_FOTO_OU_COMPROVANTE] ${texto}` : '[CLIENTE_ENVIOU_FOTO_OU_COMPROVANTE]';
+        } else if (msg.message?.audioMessage) {
+          texto = '[CLIENTE_ENVIOU_AUDIO]';
+        } else if (msg.message?.stickerMessage) {
+          texto = '[CLIENTE_ENVIOU_FIGURINHA]';
+        } else if (msg.message?.documentMessage) {
+          texto = texto ? `[CLIENTE_ENVIOU_DOCUMENTO_OU_COMPROVANTE] ${texto}` : '[CLIENTE_ENVIOU_DOCUMENTO_OU_COMPROVANTE]';
+        }
 
         if (!texto || !texto.trim()) continue;
 
