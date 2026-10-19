@@ -131,6 +131,7 @@ export interface Configuracoes {
   nomeEmpresa: string;
   telefoneWhatsApp: string;
   statusWhatsApp: 'conectado' | 'desconectado' | 'aguardando_qr';
+  qrCodeAtual?: string;
   chavePix: string;
   tipoChavePix: 'telefone' | 'cpf' | 'email' | 'aleatoria';
   sinalPadrao: number;

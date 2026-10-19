@@ -113,6 +113,16 @@ async function iniciarWhatsApp() {
       await salvarQrHtml(qr);
       console.log(`💡 Dica: Se o QR Code acima não ficar nítido no seu terminal, você também pode abrir este arquivo no navegador:`);
       console.log(`   🔗 ${QR_HTML_PATH}\n`);
+
+      // Sincroniza com o Painel Web para exibir o QR Code ao vivo no modal do site!
+      try {
+        const qrBase64 = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'atualizar_qrcode', qrCode: qrBase64 })
+        }).catch(() => {});
+      } catch (_) {}
     }
 
     if (connection === 'close') {
@@ -126,6 +136,13 @@ async function iniciarWhatsApp() {
         console.log(`❌ A sessão foi desconectada no aparelho. Limpando credenciais antigas...`);
         try {
           fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        } catch (_) {}
+        try {
+          fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'desconectar_whatsapp' })
+          }).catch(() => {});
         } catch (_) {}
         console.log(`🔄 Reiniciando para gerar um novo QR Code...`);
         setTimeout(iniciarWhatsApp, 2000);
@@ -144,6 +161,19 @@ async function iniciarWhatsApp() {
   ✨ Mantenha esta janela aberta para manter o atendimento funcionando.
 ========================================================================
 `);
+      // Sincroniza status no Painel Web
+      try {
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'atualizar_status_whatsapp',
+            status: 'conectado',
+            telefoneConectado: userJid,
+            qrCode: ''
+          })
+        }).catch(() => {});
+      } catch (_) {}
     }
   });
 

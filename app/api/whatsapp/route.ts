@@ -659,6 +659,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ iaAtiva: db.configuracoes.iaAtiva });
     }
 
+    if (body.action === 'atualizar_qrcode') {
+      db.configuracoes.statusWhatsApp = 'aguardando_qr';
+      db.configuracoes.qrCodeAtual = body.qrCode || '';
+      await saveDb(db);
+      return NextResponse.json({ sucesso: true, status: 'aguardando_qr' });
+    }
+
+    if (body.action === 'atualizar_status_whatsapp') {
+      db.configuracoes.statusWhatsApp = body.status || 'desconectado';
+      if (body.telefoneConectado) {
+        db.configuracoes.telefoneWhatsApp = body.telefoneConectado;
+      }
+      if (body.status === 'conectado') {
+        db.configuracoes.qrCodeAtual = '';
+      }
+      await saveDb(db);
+      return NextResponse.json({ sucesso: true, status: db.configuracoes.statusWhatsApp });
+    }
+
+    if (body.action === 'desconectar_whatsapp') {
+      db.configuracoes.statusWhatsApp = 'desconectado';
+      db.configuracoes.qrCodeAtual = '';
+      await saveDb(db);
+      return NextResponse.json({ sucesso: true, status: 'desconectado' });
+    }
+
     if (body.action === 'update_config') {
       if (body.nomeEmpresa) db.configuracoes.nomeEmpresa = body.nomeEmpresa;
       if (body.telefoneWhatsApp) db.configuracoes.telefoneWhatsApp = body.telefoneWhatsApp;
