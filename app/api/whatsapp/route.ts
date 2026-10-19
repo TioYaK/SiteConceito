@@ -7,7 +7,8 @@ async function gerarRespostaGemini(
   clienteNome: string,
   db: AppData,
   apiKey: string,
-  modeloNome: string = 'gemini-3.5-flash-lite'
+  modeloNome: string = 'gemini-3.5-flash-lite',
+  clienteTelefone: string = '5511999998888'
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosParaTentar = Array.from(new Set([
@@ -193,7 +194,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
       agendamentoCriado = {
         id: `ag-${Date.now()}`,
         clienteNome,
-        clienteTelefone: "5511999998888",
+        clienteTelefone: clienteTelefone || "5511999998888",
         servicoId: srv.id,
         servicoNome: srv.nome,
         data: dataAg,
@@ -231,7 +232,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
       pedidoCriado = {
         id: `ped-${Date.now()}`,
         clienteNome,
-        clienteTelefone: "5511999998888",
+        clienteTelefone: clienteTelefone || "5511999998888",
         itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
         tipoEntrega,
         endereco: parsed.dadosPedido.endereco || '',
@@ -265,12 +266,14 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
       const cepIdentificado = parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '';
 
       const clienteExistente = db.clientes.find(c =>
+        (clienteTelefone && c.telefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
         c.nome.toLowerCase() === nomeIdentificado.toLowerCase() ||
         c.nome.toLowerCase() === clienteNome.toLowerCase()
       );
 
       if (clienteExistente) {
         if (parsed.dadosCliente?.nomeCompleto) clienteExistente.nome = parsed.dadosCliente.nomeCompleto;
+        if (clienteTelefone) clienteExistente.telefone = clienteTelefone;
         if (dataNascIdentificada) clienteExistente.dataNascimento = dataNascIdentificada;
         if (enderecoIdentificado) clienteExistente.endereco = enderecoIdentificado;
         if (cepIdentificado) clienteExistente.cep = cepIdentificado;
@@ -281,7 +284,7 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
         db.clientes.unshift({
           id: `cli-${Date.now()}`,
           nome: nomeIdentificado,
-          telefone: "5511999998888",
+          telefone: clienteTelefone || "5511999998888",
           dataNascimento: dataNascIdentificada,
           endereco: enderecoIdentificado,
           cep: cepIdentificado,
@@ -321,7 +324,8 @@ function formatarReal(valor: number): string {
 function gerarRespostaRecepcionista(
   mensagem: string,
   clienteNome: string,
-  db: AppData
+  db: AppData,
+  clienteTelefone: string = "5511999998888"
 ): { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
@@ -421,7 +425,7 @@ function gerarRespostaRecepcionista(
       const novoPedido: Pedido = {
         id: `ped-${Date.now()}`,
         clienteNome,
-        clienteTelefone: "5511999998888",
+        clienteTelefone: clienteTelefone || "5511999998888",
         itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: 1, precoUnitario: prod.precoVenda || 45.00 }],
         tipoEntrega,
         valorItens: prod.precoVenda || 45.00,
@@ -563,7 +567,7 @@ function gerarRespostaRecepcionista(
     const novoAgendamento: Agendamento = {
       id: `ag-${Date.now()}`,
       clienteNome,
-      clienteTelefone: "5511999998888",
+      clienteTelefone: clienteTelefone || "5511999998888",
       servicoId: servicoEncontrado.id,
       servicoNome: servicoEncontrado.nome,
       data: dataEscolhida,
@@ -714,7 +718,14 @@ export async function POST(request: Request) {
 
     if (body.action === 'simular_mensagem' || body.event === 'messages.upsert') {
       const mensagemTexto = body.mensagem || body.data?.message?.conversation || "Olá";
-      const remetenteNome = body.clienteNome || "Mariana (Teste)";
+      const remetenteTelefone = (body.telefone || body.sender || (body.data?.key?.remoteJid ? body.data.key.remoteJid.replace('@s.whatsapp.net', '') : "5511999998888")).replace(/\D/g, '');
+
+      // Se o cliente já constar no banco com este telefone, usamos o nome oficial cadastrado
+      const clienteCadastrado = (db.clientes || []).find(c => c.telefone.replace(/\D/g, '') === remetenteTelefone);
+      let remetenteNome = body.clienteNome;
+      if (!remetenteNome || remetenteNome === 'Mariana (Teste)' || remetenteNome === 'Cliente') {
+        remetenteNome = clienteCadastrado?.nome || body.clienteNome || "Cliente";
+      }
 
       let resultado: { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null = null;
       const apiKey = process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
@@ -727,7 +738,8 @@ export async function POST(request: Request) {
             remetenteNome,
             db,
             apiKey,
-            db.configuracoes.modeloGemini || 'gemini-1.5-flash'
+            db.configuracoes.modeloGemini || 'gemini-1.5-flash',
+            remetenteTelefone
           );
           if (resultado) {
             motorUtilizado = `google_${db.configuracoes.modeloGemini || 'gemini-1.5-flash'}`;
@@ -738,7 +750,7 @@ export async function POST(request: Request) {
       }
 
       if (!resultado) {
-        resultado = gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db);
+        resultado = gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db, remetenteTelefone);
       }
 
       return NextResponse.json({

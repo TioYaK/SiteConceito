@@ -33,3 +33,9 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# WhatsApp Worker local data
+worker-whatsapp/node_modules/
+worker-whatsapp/auth_info_baileys/
+worker-whatsapp/qr.html
+
