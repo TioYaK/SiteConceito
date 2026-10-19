@@ -20,9 +20,38 @@ import {
   Tag,
   DollarSign,
   Edit3,
-  Trash2
+  Trash2,
+  Image as ImageIcon,
+  Upload
 } from 'lucide-react';
 import { ItemEstoque } from '@/lib/store';
+
+const PRESETS_FOTOS_PRODUTOS = [
+  {
+    nome: 'Espuma Cílios',
+    url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&auto=format&fit=crop&q=80'
+  },
+  {
+    nome: 'Sérum Cílios & Brow',
+    url: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800&auto=format&fit=crop&q=80'
+  },
+  {
+    nome: 'Gel Brow Lamination',
+    url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80'
+  },
+  {
+    nome: 'Máscara Facial Calmante',
+    url: 'https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=800&auto=format&fit=crop&q=80'
+  },
+  {
+    nome: 'Pincel & Escovinhas',
+    url: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?w=800&auto=format&fit=crop&q=80'
+  },
+  {
+    nome: 'Loção / Tônico',
+    url: 'https://images.unsplash.com/photo-1608248597359-5433100657f0?w=800&auto=format&fit=crop&q=80'
+  }
+];
 
 interface EstoqueTabProps {
   estoque: ItemEstoque[];
@@ -57,6 +86,7 @@ export function EstoqueTab({
   const [descricao, setDescricao] = useState('');
   const [beneficios, setBeneficios] = useState('');
   const [modoUso, setModoUso] = useState('');
+  const [imagemUrl, setImagemUrl] = useState('');
 
   const itensEmAlerta = estoque.filter(item => item.quantidade <= item.minimoAlerta);
   const produtosVenda = estoque.filter(item => item.tipo === 'venda_balcao');
@@ -77,6 +107,7 @@ export function EstoqueTab({
     setDescricao('');
     setBeneficios('');
     setModoUso('');
+    setImagemUrl('');
     setModalAberto(true);
   };
 
@@ -92,7 +123,21 @@ export function EstoqueTab({
     setDescricao(item.descricao || '');
     setBeneficios(item.beneficios || '');
     setModoUso(item.modoUso || '');
+    setImagemUrl(item.imagemUrl || '');
     setModalAberto(true);
+  };
+
+  const handleUploadFotoLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setImagemUrl(event.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleExcluir = (id: string, nomeItem: string) => {
@@ -118,7 +163,8 @@ export function EstoqueTab({
       categoria: tipo === 'venda_balcao' ? categoria : undefined,
       descricao: tipo === 'venda_balcao' && descricao.trim() ? descricao.trim() : undefined,
       beneficios: tipo === 'venda_balcao' && beneficios.trim() ? beneficios.trim() : undefined,
-      modoUso: tipo === 'venda_balcao' && modoUso.trim() ? modoUso.trim() : undefined
+      modoUso: tipo === 'venda_balcao' && modoUso.trim() ? modoUso.trim() : undefined,
+      imagemUrl: tipo === 'venda_balcao' && imagemUrl.trim() ? imagemUrl.trim() : undefined
     };
 
     if (itemEditando && onEditarItem) {
@@ -306,15 +352,21 @@ export function EstoqueTab({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                      emFalta 
-                        ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' 
-                        : isVenda
-                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}>
-                      {isVenda ? <ShoppingBag className="w-5 h-5" /> : <Package className="w-5 h-5" />}
-                    </div>
+                    {item.imagemUrl ? (
+                      <div className="w-12 h-12 rounded-2xl overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700 shadow-xs">
+                        <img src={item.imagemUrl} alt={item.nome} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                        emFalta 
+                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' 
+                          : isVenda
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        {isVenda ? <ShoppingBag className="w-5 h-5" /> : <Package className="w-5 h-5" />}
+                      </div>
+                    )}
 
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -749,6 +801,85 @@ export function EstoqueTab({
                       <option value="Skincare Facial">Skincare Facial / Pós-Procedimento</option>
                       <option value="Acessórios & Cuidados">Acessórios & Cuidados</option>
                     </select>
+                  </div>
+
+                  {/* Foto do Produto para o Catálogo Online */}
+                  <div className="space-y-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />
+                        Foto do Produto (Catálogo Online):
+                      </span>
+                      {imagemUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setImagemUrl('')}
+                          className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                        >
+                          Remover foto
+                        </button>
+                      )}
+                    </label>
+
+                    {/* Preview da Foto se houver */}
+                    {imagemUrl && (
+                      <div className="relative w-full h-32 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 mb-2">
+                        <img 
+                          src={imagemUrl} 
+                          alt="Pré-visualização do Produto" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+
+                    {/* Presets Rápidos com 1 Clique */}
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block">
+                        Fotos Profissionais Prontas (1 clique):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {PRESETS_FOTOS_PRODUTOS.map((p) => (
+                          <button
+                            key={p.nome}
+                            type="button"
+                            onClick={() => setImagemUrl(p.url)}
+                            className={`text-[10px] px-2 py-1 rounded-lg border font-medium transition cursor-pointer ${
+                              imagemUrl === p.url
+                                ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                            }`}
+                          >
+                            📸 {p.nome}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Upload do Arquivo Local ou URL */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <label className="flex items-center justify-center gap-1.5 w-full bg-white dark:bg-slate-800 border border-dashed border-slate-300 dark:border-slate-600 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-emerald-500 hover:text-emerald-600 transition cursor-pointer">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Enviar do Celular/PC</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleUploadFotoLocal}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+
+                      <div>
+                        <input
+                          type="url"
+                          placeholder="Ou cole URL da foto..."
+                          value={imagemUrl.startsWith('data:') ? '' : imagemUrl}
+                          onChange={(e) => setImagemUrl(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div>

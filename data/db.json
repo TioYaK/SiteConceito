@@ -156,7 +156,8 @@
       "categoria": "Cílios",
       "descricao": "Espuma hipoalergênica com pH neutro desenvolvida para higienização diária das extensões de cílios.",
       "beneficios": "Higieniza sem arder os olhos, remove a oleosidade e faz a extensão de cílios durar até o dobro de tempo!",
-      "modoUso": "Aplicar 1 pump no pincel macio, massagear suavemente a pálpebra e enxaguar com água corrente."
+      "modoUso": "Aplicar 1 pump no pincel macio, massagear suavemente a pálpebra e enxaguar com água corrente.",
+      "imagemUrl": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "est-8",
@@ -169,7 +170,8 @@
       "categoria": "Cílios & Sobrancelhas",
       "descricao": "Sérum nutritivo enriquecido com biotina, queratina vegetal, peptídeos e pantenol.",
       "beneficios": "Estimula o crescimento natural dos fios, encorpa sobrancelhas falhadas e previne a queda prematura.",
-      "modoUso": "Aplicar na raiz dos cílios e sobrancelhas todas as noites antes de dormir."
+      "modoUso": "Aplicar na raiz dos cílios e sobrancelhas todas as noites antes de dormir.",
+      "imagemUrl": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "est-9",
@@ -182,7 +184,8 @@
       "categoria": "Sobrancelhas",
       "descricao": "Gel incolor de altíssima fixação que alinha e penteia os fios das sobrancelhas para cima.",
       "beneficios": "Mantém o efeito Brow Lamination intacto o dia todo sem esfarelar e sem deixar resíduos brancos.",
-      "modoUso": "Pentear as sobrancelhas para cima com a escovinha de precisão no sentido desejado."
+      "modoUso": "Pentear as sobrancelhas para cima com a escovinha de precisão no sentido desejado.",
+      "imagemUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "est-10",
@@ -195,7 +198,8 @@
       "categoria": "Skincare Facial",
       "descricao": "Sheet mask calmante intensiva de algodão embebida em camomila, calêndula e aloe vera pura.",
       "beneficios": "Alivia imediatamente a vermelhidão pós-limpeza de pele ou design, fecha os poros e hidrata profundamente.",
-      "modoUso": "Repousar a máscara sobre a pele limpa por 15 a 20 minutos após o atendimento ou em casa."
+      "modoUso": "Repousar a máscara sobre a pele limpa por 15 a 20 minutos após o atendimento ou em casa.",
+      "imagemUrl": "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?w=800&auto=format&fit=crop&q=80"
     }
   ],
   "clientes": [],
