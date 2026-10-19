@@ -56,7 +56,7 @@ export function RecepcionistaTab({
 
   // Estados do Google Gemini Pro
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState(configuracoes.geminiApiKey || '');
-  const [modeloGeminiInput, setModeloGeminiInput] = useState(configuracoes.modeloGemini || 'gemini-1.5-flash');
+  const [modeloGeminiInput, setModeloGeminiInput] = useState(configuracoes.modeloGemini || 'gemini-3.8-flash');
   const [mostrarKey, setMostrarKey] = useState(false);
   const [testandoGemini, setTestandoGemini] = useState(false);
   const [resultadoTesteGemini, setResultadoTesteGemini] = useState<{ sucesso: boolean; mensagem?: string; erro?: string } | null>(null);
@@ -534,9 +534,10 @@ export function RecepcionistaTab({
                 onChange={(e) => setModeloGeminiInput(e.target.value)}
                 className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Recomendado - Ultra Rápido ✨)</option>
-                <option value="gemini-flash-lite-latest">Gemini Flash Lite (Mais recente 🚀)</option>
-                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Estável & Preciso 🧠)</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recomendado - Ultra Rápido e Inteligente ⚡)</option>
+                <option value="gemini-3.7-flash">Gemini 3.7 Flash (Excelente Raciocínio 🎯)</option>
+                <option value="gemini-3.6-flash">Gemini 3.6 Flash (Alta Estabilidade 🚀)</option>
+                <option value="gemini-flash-latest">Gemini Flash Latest (Última versão automática)</option>
               </select>
             </div>
           </div>

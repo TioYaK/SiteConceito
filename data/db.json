@@ -1,9 +1,9 @@
 {
   "configuracoes": {
     "nomeEmpresa": "Studio Bruna Meireles",
-    "telefoneWhatsApp": "5511987654321",
-    "statusWhatsApp": "aguardando_qr",
-    "chavePix": "11987654321",
+    "telefoneWhatsApp": "556796203089",
+    "statusWhatsApp": "conectado",
+    "chavePix": "67996203089",
     "tipoChavePix": "telefone",
     "sinalPadrao": 30,
     "horarioAbertura": "09:00",
@@ -32,7 +32,7 @@
       "permiteCorreios": true
     },
     "geminiApiKey": "",
-    "modeloGemini": "gemini-3.5-flash-lite",
+    "modeloGemini": "gemini-3.8-flash",
     "mercadoPagoAtivo": false,
     "mercadoPagoAccessToken": "",
     "mercadoPagoPublicKey": ""

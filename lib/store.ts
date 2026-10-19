@@ -216,7 +216,7 @@ const INITIAL_DATA: AppData = {
       permiteCorreios: true
     },
     geminiApiKey: process.env.GEMINI_API_KEY || "",
-    modeloGemini: "gemini-3.5-flash-lite",
+    modeloGemini: "gemini-3.8-flash",
     mercadoPagoAtivo: false,
     mercadoPagoAccessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
     mercadoPagoPublicKey: process.env.MERCADO_PAGO_PUBLIC_KEY || ""

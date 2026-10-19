@@ -21,6 +21,7 @@ const START_TIMESTAMP = Math.floor(Date.now() / 1000);
 
 // Fila de debounce de mensagens para agrupar mensagens seguidas do mesmo cliente
 const messageQueues = new Map();
+const conversationHistories = new Map();
 
 console.clear();
 console.log(`
@@ -245,6 +246,7 @@ async function iniciarWhatsApp() {
           messageQueues.delete(debounceKey);
 
           try {
+            const historico = conversationHistories.get(remoteJid) || [];
             console.log(`⏳ Processando com Manu IA via ${API_URL}...`);
             const respostaApi = await fetch(API_URL, {
               method: 'POST',
@@ -253,7 +255,8 @@ async function iniciarWhatsApp() {
                 action: 'simular_mensagem',
                 mensagem: textosParaProcessar,
                 clienteNome: nomeCliente,
-                telefone: telefone
+                telefone: telefone,
+                historico: historico
               })
             });
 
@@ -264,6 +267,14 @@ async function iniciarWhatsApp() {
             const data = await respostaApi.json();
 
             if (data && data.respostaBot) {
+              // Atualiza o histórico de conversas na memória (últimos 10 turnos)
+              historico.push({ role: 'user', text: textosParaProcessar });
+              historico.push({ role: 'model', text: data.respostaBot });
+              if (historico.length > 10) {
+                historico.splice(0, historico.length - 10);
+              }
+              conversationHistories.set(remoteJid, historico);
+
               // Pausa o digitando
               try {
                 await sock.sendPresenceUpdate('paused', remoteJid);

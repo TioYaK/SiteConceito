@@ -2,60 +2,165 @@ import { NextResponse } from 'next/server';
 import { getDb, saveDb, Agendamento, Servico, Pedido, AppData } from '@/lib/store';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+/**
+ * Gerador de Chave PIX Copia e Cola Oficial (Padrão Banco Central do Brasil / EMVCo)
+ * Inclui cálculo matemático real de CRC16-CCITT (Polinômio 0x1021)
+ */
+function gerarPixCopiaECola(
+  chave: string,
+  nomeRecebedor: string,
+  cidade: string,
+  valor: number,
+  txid: string = '***'
+): string {
+  const chaveLimpa = (chave || '67996203089').trim();
+  const nomeLimpo = (nomeRecebedor || 'Studio Bruna Meireles')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .trim()
+    .substring(0, 25);
+
+  const cidadeLimpa = (cidade || 'SAO PAULO')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .trim()
+    .substring(0, 15) || 'SAO PAULO';
+
+  const valorFormatado = valor.toFixed(2);
+
+  const tlv = (id: string, value: string) => {
+    const len = value.length.toString().padStart(2, '0');
+    return `${id}${len}${value}`;
+  };
+
+  const merchantAccountInfo = 
+    tlv('00', 'br.gov.bcb.pix') + 
+    tlv('01', chaveLimpa);
+
+  const additionalData = tlv('05', txid || '***');
+
+  const payloadSemCrc = 
+    tlv('00', '01') + 
+    tlv('26', merchantAccountInfo) +
+    tlv('52', '0000') + 
+    tlv('53', '986') + 
+    tlv('54', valorFormatado) + 
+    tlv('58', 'BR') + 
+    tlv('59', nomeLimpo) + 
+    tlv('60', cidadeLimpa) + 
+    tlv('62', additionalData) +
+    '6304';
+
+  let crc = 0xFFFF;
+  for (let i = 0; i < payloadSemCrc.length; i++) {
+    crc ^= payloadSemCrc.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = (crc << 1) ^ 0x1021;
+      } else {
+        crc = crc << 1;
+      }
+      crc &= 0xFFFF;
+    }
+  }
+
+  const crcHex = crc.toString(16).toUpperCase().padStart(4, '0');
+  return `${payloadSemCrc}${crcHex}`;
+}
+
 async function gerarRespostaGemini(
   mensagem: string,
   clienteNome: string,
   db: AppData,
   apiKey: string,
-  modeloNome: string = 'gemini-3.5-flash-lite',
-  clienteTelefone: string = '5511999998888'
+  modeloNome: string = 'gemini-3.8-flash',
+  clienteTelefone: string = '5511999998888',
+  historico: Array<{ role: 'user' | 'model'; text: string }> = []
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosParaTentar = Array.from(new Set([
     modeloNome,
-    'gemini-3.5-flash-lite',
-    'gemini-flash-lite-latest',
-    'gemini-3.1-flash-lite'
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-flash-latest'
   ]));
 
-    const hojeStr = new Date().toISOString().split('T')[0];
-    const dAmanha = new Date();
-    dAmanha.setDate(dAmanha.getDate() + 1);
-    const amanhaStr = dAmanha.toISOString().split('T')[0];
+  const agora = new Date();
+  const horaAtualStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  const dataAtualFormatada = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+  const hojeStr = agora.toISOString().split('T')[0];
+  const dAmanha = new Date(agora);
+  dAmanha.setDate(dAmanha.getDate() + 1);
+  const amanhaStr = dAmanha.toISOString().split('T')[0];
 
-    const servicos = db.servicos.filter(s => s.ativo);
-    const produtos = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
-    const agendamentosOcupadosHoje = (db.agendamentos || [])
-      .filter(a => a.data === hojeStr && a.status !== 'cancelado')
-      .map(a => `${a.horario} (${a.servicoNome})`);
+  const servicos = db.servicos.filter(s => s.ativo);
+  const produtos = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
+  const agendamentosOcupadosHoje = (db.agendamentos || [])
+    .filter(a => a.data === hojeStr && a.status !== 'cancelado')
+    .map(a => `${a.horario} (${a.servicoNome})`);
 
-    const agendamentosOcupadosAmanha = (db.agendamentos || [])
-      .filter(a => a.data === amanhaStr && a.status !== 'cancelado')
-      .map(a => `${a.horario} (${a.servicoNome})`);
+  const agendamentosOcupadosAmanha = (db.agendamentos || [])
+    .filter(a => a.data === amanhaStr && a.status !== 'cancelado')
+    .map(a => `${a.horario} (${a.servicoNome})`);
 
-    const frete = db.configuracoes.frete || {
-      taxaMotoboy: 15.0,
-      cepOrigem: "01304-001",
-      cidadeOrigem: "São Paulo",
-      estadoOrigem: "SP",
-      freteGratisAcimaDe: 150.0
-    };
+  const frete = db.configuracoes.frete || {
+    taxaMotoboy: 15.0,
+    cepOrigem: "01304-001",
+    cidadeOrigem: "São Paulo",
+    estadoOrigem: "SP",
+    freteGratisAcimaDe: 150.0
+  };
 
-    const endereco = db.configuracoes.endereco || {
-      logradouro: "Rua Augusta",
-      numero: "1500",
-      complemento: "Sala 32",
-      bairro: "Consolação",
-      cidade: "São Paulo",
-      estado: "SP",
-      cep: "01304-001",
-      pontoReferencia: "Próximo à estação Consolação do Metrô (Linha Verde)",
-      linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
-    };
+  const endereco = db.configuracoes.endereco || {
+    logradouro: "Rua Augusta",
+    numero: "1500",
+    complemento: "Sala 32",
+    bairro: "Consolação",
+    cidade: "São Paulo",
+    estado: "SP",
+    cep: "01304-001",
+    pontoReferencia: "Próximo à estação Consolação do Metrô (Linha Verde)",
+    linkMaps: "https://maps.google.com/?q=Rua+Augusta,+1500+-+Consola%C3%A7%C3%A3o,+S%C3%A3o+Paulo+-+SP"
+  };
 
-    const promptSistema = `
+  const promptSistema = `
 Você é a Manu, recepcionista virtual inteligente, simpática e concierge de beleza do '${db.configuracoes.nomeEmpresa}'.
-Data de hoje: ${hojeStr}. Horário de atendimento do Studio: das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}.
+Momento atual em São Paulo: ${dataAtualFormatada}, às ${horaAtualStr} (horário de Brasília).
+Horário de atendimento do Studio: das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}.
+
+REGRAS CRÍTICAS DE AGENDAMENTO (ATENÇÃO MÁXIMA):
+1. SE A CLIENTE DISSER APENAS "quero agendar", "agendar procedimento", "tem horário?", OU AINDA NÃO ESCOLHEU O PROCEDIMENTO:
+   - Defina "acao": "nenhuma".
+   - Responda com muito carinho e simpatia: diga que será um prazer atendê-la e apresente os procedimentos disponíveis:
+     • Extensão de Cílios (Volume / Fio a Fio)
+     • Design de Sobrancelhas com Henna
+     • Brow Lamination
+     • Micropigmentação de Sobrancelhas
+     • Limpeza de Pele Profunda
+   - Pergunte qual deles ela deseja e para qual dia da semana e período (manhã ou tarde) ela prefere.
+   - NUNCA assuma um procedimento por conta própria!
+   - NUNCA crie agendamento nem peça sinal PIX neste momento!
+
+2. SE A CLIENTE ESCOLHEU O PROCEDIMENTO MAS AINDA NÃO DEFINIU DATA E HORÁRIO:
+   - Defina "acao": "nenhuma".
+   - Confirme o procedimento com entusiasmo, mencione a duração e o valor, e pergunte qual dia e horário ela prefere dentro do expediente (${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}).
+   - Se já passou do horário de atendimento hoje (agora são ${horaAtualStr}), ofereça horários a partir de amanhã! NUNCA ofereça horários no passado para hoje!
+
+3. APENAS CRIE O AGENDAMENTO ("acao": "criar_agendamento") QUANDO:
+   - O procedimento específico estiver claro e confirmado pela cliente.
+   - O dia específico estiver definido (amanhã, hoje caso ainda haja tempo no expediente, ou data futura).
+   - O horário específico estiver definido dentro do expediente comercial.
+   - Nesses casos, defina:
+     "acao": "criar_agendamento",
+     "dadosAgendamento": {
+       "servicoId": "id_do_servico",
+       "data": "YYYY-MM-DD",
+       "horario": "HH:MM"
+     }
+     Avise com carinho que o horário provisório foi separado e explique sobre o sinal de reserva.
 
 ENDEREÇO FÍSICO DO STUDIO:
 - Logradouro: ${endereco.logradouro}, nº ${endereco.numero} ${endereco.complemento ? `(${endereco.complemento})` : ''}
@@ -105,40 +210,10 @@ TRAVAS DE SEGURANÇA E PRECISÃO ABSOLUTA (BLINDAGEM CONTRA ERROS):
 1. CATÁLOGO FECHADO:
    - Somos especialistas EXCLUSIVAS em Cílios, Sobrancelhas e Limpeza de Pele Profunda.
    - NUNCA invente, ofereça ou agende: corte de cabelo, manicure/unhas em gel, depilação a laser, botox, preenchimento labial, massagens ou procedimentos médicos.
-   - Se pedirem algo fora, responda com carinho: "No momento somos especialistas exclusivos em cuidados do olhar (cílios e sobrancelhas) e estética facial! Não realizamos [serviço pedido], mas adoraríamos te receber para cuidar do seu olhar ou da sua pele ✨".
 2. DISTINÇÃO CLARA ENTRE SERVIÇO E PRODUTO:
-   - SERVIÇOS (feitos no studio): Exigem horário na agenda e sinal PIX para reservar a profissional.
-   - PRODUTOS (home-care para casa): Não ocupam tempo de atendimento na cabine. A cliente pode comprar para retirar na recepção ou receber por motoboy no mesmo dia!
-   - Se a cliente agendar um serviço e perguntar como cuidar depois, sugira o produto ideal para os cuidados em casa (ex: Espuma para cílios, Gel para sobrancelhas).
-3. ZERO DESCONTO ARBITRÁRIO:
-   - Nossos preços são estritamente os da tabela. NUNCA altere os valores ou dê descontos por conta própria.
-   - Se a cliente pechinchar: explique com elegância que nossos valores refletem os produtos importados de alta qualidade e o atendimento exclusivo, e lembre que aceitamos parcelamento em até 12x no cartão de crédito!
-4. PREVENÇÃO DE CONFLITO DE AGENDA:
-   - Atendemos APENAS entre ${db.configuracoes.horarioAbertura} e ${db.configuracoes.horarioFechamento}.
-   - Se a cliente pedir um horário já ocupado ou fora do expediente, avise gentilmente e ofereça os horários vagos mais próximos.
-5. CONTRAINDICAÇÕES MÉDICAS:
-   - Micropigmentação é contraindicada para gestantes e lactantes nos primeiros meses sem autorização médica.
-   - Para extensão de cílios, alerte que não se deve molhar nas primeiras 24 horas para a cura da cola.
-6. SINAL PIX:
-   - Reforce com delicadeza que o sinal é exigido para travar o horário com a profissional na agenda e é 100% abatido no dia do atendimento.
-7. CADASTRO OBRIGATÓRIO (NOME COMPLETO, DATA DE ANIVERSÁRIO E ENDEREÇO COM CEP):
-   - Para concluir qualquer agendamento ou pedido de produtos, o Studio exige o cadastro completo da cliente com:
-     1) Nome Completo
-     2) Data de Aniversário (Dia e Mês, ex: 24/10 ou 16 de Outubro) -> Explique com muito carinho e entusiasmo: "para você participar do nosso Clube VIP de Aniversariantes e ganhar mimos e descontos exclusivos no mês do seu dia! 🎂🎁"
-     3) Endereço residencial com CEP (para a ficha cadastral do Studio e entregas por motoboy).
-   - Se a cliente quiser agendar ou comprar e ainda não informou esses 3 dados, peça-os educadamente antes ou durante a confirmação!
-   - Se a cliente informar qualquer um desses dados, extraia-os no campo "dadosCliente": { "nomeCompleto": string, "dataNascimento": string, "endereco": string, "cep": string }.
-
-INSTRUÇÕES DE AÇÃO:
-1. Se a cliente quiser agendar um serviço e especificou o serviço e data/horário:
-   - "acao": "criar_agendamento"
-   - "dadosAgendamento": { "servicoId": string, "data": "YYYY-MM-DD", "horario": "HH:MM" }
-   - Avise que reservou o horário provisório e informe o valor do sinal com carinho.
-2. Se a cliente quiser comprar um produto e já escolheu a forma de envio (motoboy, retirada ou correios):
-   - "acao": "criar_pedido_produto"
-   - "dadosPedido": { "produtoId": string, "quantidade": number, "tipoEntrega": "motoboy" | "retirada" | "correios", "cep": string, "endereco": string }
-3. Se for apenas conversa, tirar dúvidas de preços, frete, benefícios das técnicas, procedimentos:
-   - "acao": "nenhuma"
+   - SERVIÇOS: Exigem horário na agenda e sinal PIX para travar o horário.
+   - PRODUTOS: Cuidados para casa (entrega por motoboy ou retirada).
+3. ZERO DESCONTO ARBITRÁRIO: Nossos preços são estritamente os da tabela.
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
 {
@@ -171,93 +246,119 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
         model: m,
         generationConfig: {
           responseMimeType: "application/json",
-          temperature: 0.7,
+          temperature: 0.5,
         },
         systemInstruction: promptSistema,
       });
 
-      const result = await model.generateContent(`Mensagem da cliente ${clienteNome}: "${mensagem}"`);
+      let formattedHistory: any[] = [];
+      if (Array.isArray(historico) && historico.length > 0) {
+        formattedHistory = historico
+          .filter(h => h && h.text && h.text.trim())
+          .map(h => ({
+            role: h.role === 'model' ? 'model' : 'user',
+            parts: [{ text: h.text }]
+          }));
+
+        while (formattedHistory.length > 0 && formattedHistory[0].role !== 'user') {
+          formattedHistory.shift();
+        }
+      }
+
+      const chat = model.startChat({ history: formattedHistory });
+      const result = await chat.sendMessage(`Mensagem da cliente ${clienteNome}: "${mensagem}"`);
       const textoJson = result.response.text();
       const parsed = JSON.parse(textoJson);
 
-    let agendamentoCriado: Agendamento | null = null;
-    let pedidoCriado: Pedido | null = null;
-    let respostaFinal = parsed.respostaWhatsApp || "";
+      let agendamentoCriado: Agendamento | null = null;
+      let pedidoCriado: Pedido | null = null;
+      let respostaFinal = parsed.respostaWhatsApp || "";
 
-    // Se a IA decidiu criar um agendamento
-    if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
-      const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
-      const dataAg = parsed.dadosAgendamento.data || hojeStr;
-      const horarioAg = parsed.dadosAgendamento.horario || "14:00";
-      const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${srv.valorSinal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+      // Se a IA decidiu criar um agendamento
+      if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
+        const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
+        const dataAg = parsed.dadosAgendamento.data || hojeStr;
+        const horarioAg = parsed.dadosAgendamento.horario || "14:00";
+        const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
 
-      agendamentoCriado = {
-        id: `ag-${Date.now()}`,
-        clienteNome,
-        clienteTelefone: clienteTelefone || "5511999998888",
-        servicoId: srv.id,
-        servicoNome: srv.nome,
-        data: dataAg,
-        horario: horarioAg,
-        duracaoMinutos: srv.duracaoMinutos,
-        valorTotal: srv.precoTotal,
-        valorSinal: srv.valorSinal,
-        sinalPago: false,
-        status: 'aguardando_sinal',
-        pixCodigo: pixCode,
-        criadoVia: 'whatsapp_ia',
-        createdAt: new Date().toISOString()
-      };
+        const pixCode = gerarPixCopiaECola(
+          chavePixOficial,
+          db.configuracoes.nomeEmpresa,
+          db.configuracoes.endereco?.cidade || 'SAO PAULO',
+          srv.valorSinal
+        );
 
-      db.agendamentos.push(agendamentoCriado);
-      saveDb(db);
+        agendamentoCriado = {
+          id: `ag-${Date.now()}`,
+          clienteNome,
+          clienteTelefone: clienteTelefone || "5511999998888",
+          servicoId: srv.id,
+          servicoNome: srv.nome,
+          data: dataAg,
+          horario: horarioAg,
+          duracaoMinutos: srv.duracaoMinutos,
+          valorTotal: srv.precoTotal,
+          valorSinal: srv.valorSinal,
+          sinalPago: false,
+          status: 'aguardando_sinal',
+          pixCodigo: pixCode,
+          criadoVia: 'whatsapp_ia',
+          createdAt: new Date().toISOString()
+        };
 
-      if (!respostaFinal.includes(pixCode)) {
-        respostaFinal += `\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\``;
+        db.agendamentos.push(agendamentoCriado);
+        await saveDb(db);
+
+        if (!respostaFinal.includes(pixCode)) {
+          respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+        }
       }
-    }
 
-    // Se a IA decidiu criar um pedido de produto
-    if (parsed.acao === 'criar_pedido_produto' && parsed.dadosPedido?.produtoId) {
-      const prod = produtos.find(p => p.id === parsed.dadosPedido.produtoId) || produtos[0];
-      const qtd = parsed.dadosPedido.quantidade || 1;
-      const tipoEntrega = parsed.dadosPedido.tipoEntrega || 'motoboy';
-      const valorItens = (prod.precoVenda || 45.0) * qtd;
-      const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
-      const valorTotal = valorItens + valorFrete;
+      // Se a IA decidiu criar um pedido de produto
+      if (parsed.acao === 'criar_pedido_produto' && parsed.dadosPedido?.produtoId) {
+        const prod = produtos.find(p => p.id === parsed.dadosPedido.produtoId) || produtos[0];
+        const qtd = parsed.dadosPedido.quantidade || 1;
+        const tipoEntrega = parsed.dadosPedido.tipoEntrega || 'motoboy';
+        const valorItens = (prod.precoVenda || 45.0) * qtd;
+        const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
+        const valorTotal = valorItens + valorFrete;
+        const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
 
-      const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${valorTotal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+        const pixCode = gerarPixCopiaECola(
+          chavePixOficial,
+          db.configuracoes.nomeEmpresa,
+          db.configuracoes.endereco?.cidade || 'SAO PAULO',
+          valorTotal
+        );
 
-      if (!db.pedidos) db.pedidos = [];
-      pedidoCriado = {
-        id: `ped-${Date.now()}`,
-        clienteNome,
-        clienteTelefone: clienteTelefone || "5511999998888",
-        itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
-        tipoEntrega,
-        endereco: parsed.dadosPedido.endereco || '',
-        cep: parsed.dadosPedido.cep || '',
-        valorItens,
-        valorFrete,
-        valorTotal,
-        status: 'aguardando_pix',
-        pixCodigo: pixCode,
-        pago: false,
-        createdAt: new Date().toISOString()
-      };
+        if (!db.pedidos) db.pedidos = [];
+        pedidoCriado = {
+          id: `ped-${Date.now()}`,
+          clienteNome,
+          clienteTelefone: clienteTelefone || "5511999998888",
+          itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
+          tipoEntrega,
+          endereco: parsed.dadosPedido.endereco || '',
+          cep: parsed.dadosPedido.cep || '',
+          valorItens,
+          valorFrete,
+          valorTotal,
+          status: 'aguardando_pix',
+          pixCodigo: pixCode,
+          pago: false,
+          createdAt: new Date().toISOString()
+        };
 
-      // Baixa no estoque
-      prod.quantidade = Math.max(0, prod.quantidade - qtd);
+        prod.quantidade = Math.max(0, prod.quantidade - qtd);
+        db.pedidos.unshift(pedidoCriado);
+        await saveDb(db);
 
-      db.pedidos.unshift(pedidoCriado);
-      await saveDb(db);
-
-      if (!respostaFinal.includes(pixCode)) {
-        respostaFinal += `\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\``;
+        if (!respostaFinal.includes(pixCode)) {
+          respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+        }
       }
-    }
 
-    // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
+      // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
     if (parsed.dadosCliente || agendamentoCriado || pedidoCriado) {
       if (!db.clientes) db.clientes = [];
       const nomeIdentificado = parsed.dadosCliente?.nomeCompleto || clienteNome;
@@ -321,12 +422,12 @@ function formatarReal(valor: number): string {
   return valor.toFixed(2).replace('.', ',');
 }
 
-function gerarRespostaRecepcionista(
+async function gerarRespostaRecepcionista(
   mensagem: string,
   clienteNome: string,
   db: AppData,
   clienteTelefone: string = "5511999998888"
-): { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } {
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
   const produtosVenda = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
@@ -542,27 +643,49 @@ function gerarRespostaRecepcionista(
     /\b(as|as)\s*(0?[89]|1[0-9]|20)h?\b/.test(clean);
 
   if (ehAgendamento) {
-    let servicoEncontrado = servicosMencionados[0] || servicos[0];
-
-    let horarioEscolhido = "15:00";
-    const matchHorario = clean.match(/\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/);
-    const matchHorasSimples = clean.match(/\b(as)\s*(0?[89]|1[0-9]|20)h?\b/);
-
-    if (matchHorario) {
-      horarioEscolhido = matchHorario[0];
-    } else if (matchHorasSimples) {
-      const hora = matchHorasSimples[2];
-      horarioEscolhido = `${hora.padStart(2, '0')}:00`;
+    // 1. Se a cliente ainda NÃO especificou qual serviço deseja
+    if (servicosMencionados.length === 0) {
+      const listaSrv = servicos.map(s => `• *${s.nome}* - R$ ${formatarReal(s.precoTotal)} (Sinal R$ ${formatarReal(s.valorSinal)})`).join('\n');
+      return {
+        respostaBot: `Olá, ${clienteNome}! 🌸 Vai ser um prazer enorme cuidar de você no *${db.configuracoes.nomeEmpresa}*!\n\nQual dos nossos procedimentos você gostaria de agendar?\n\n${listaSrv}\n\nE para qual dia e período (manhã ou tarde) fica melhor para você? ✨🗓️`,
+        agendamentoCriado: null
+      };
     }
 
+    const servicoEncontrado = servicosMencionados[0];
+
+    // 2. Se a cliente escolheu o serviço, mas ainda NÃO especificou dia ou horário
+    const matchHorario = clean.match(/\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/);
+    const matchHorasSimples = clean.match(/\b(as)\s*(0?[89]|1[0-9]|20)h?\b/);
+    const temHorario = !!(matchHorario || matchHorasSimples);
+    const temDia = clean.includes('hoje') || clean.includes('amanha') || clean.includes('segunda') || clean.includes('terca') || clean.includes('quarta') || clean.includes('quinta') || clean.includes('sexta') || clean.includes('sabado') || /\b\d{1,2}\/\d{1,2}\b/.test(clean);
+
+    if (!temHorario || !temDia) {
+      return {
+        respostaBot: `Maravilha, ${clienteNome}! O procedimento *${servicoEncontrado.nome}* é perfeito! 😍\n\n• *Investimento:* R$ ${formatarReal(servicoEncontrado.precoTotal)} (Sinal de R$ ${formatarReal(servicoEncontrado.valorSinal)})\n• *Duração:* cerca de ${servicoEncontrado.duracaoMinutos} min\n\nNosso horário de atendimento é de segunda a sábado das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}. Para qual dia e horário você prefere marcar? 🗓️✨`,
+        agendamentoCriado: null
+      };
+    }
+
+    // 3. Se especificou serviço E data/horário
+    let horarioEscolhido = matchHorario ? matchHorario[0] : `${matchHorasSimples![2].padStart(2, '0')}:00`;
     let dataEscolhida = new Date().toISOString().split('T')[0];
+    let diaTexto = 'hoje';
+
     if (clean.includes('amanha')) {
       const d = new Date();
       d.setDate(d.getDate() + 1);
       dataEscolhida = d.toISOString().split('T')[0];
+      diaTexto = 'amanhã';
     }
 
-    const pixCode = `00020126360014BR.GOV.BCB.PIX0111${db.configuracoes.chavePix}5204000053039865405${servicoEncontrado.valorSinal.toFixed(2)}5802BR5925${db.configuracoes.nomeEmpresa.substring(0, 25)}6009SAO PAULO62070503***6304${Math.floor(1000 + Math.random() * 9000)}`;
+    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+    const pixCode = gerarPixCopiaECola(
+      chavePixOficial,
+      db.configuracoes.nomeEmpresa,
+      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      servicoEncontrado.valorSinal
+    );
 
     const novoAgendamento: Agendamento = {
       id: `ag-${Date.now()}`,
@@ -584,12 +707,10 @@ function gerarRespostaRecepcionista(
     };
 
     db.agendamentos.push(novoAgendamento);
-    saveDb(db);
-
-    const diaTexto = clean.includes('amanha') ? 'amanhã' : 'hoje';
+    await saveDb(db);
 
     return {
-      respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (Copia e Cola):*\n\`${pixCode}\`\n\nAssim que fizer a transferência, nossa confirmação chega aqui em instantes! Te esperamos com muito carinho! 💖`,
+      respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\`\n\nAssim que fizer a transferência, nossa confirmação chega aqui em instantes! Te esperamos com muito carinho! 💖`,
       agendamentoCriado: novoAgendamento
     };
   }
@@ -708,16 +829,17 @@ export async function POST(request: Request) {
 
     if (body.action === 'testar_gemini') {
       const chave = body.geminiApiKey || process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
-      const modelo = body.modeloGemini || db.configuracoes.modeloGemini || 'gemini-3.5-flash-lite';
+      const modelo = body.modeloGemini || db.configuracoes.modeloGemini || 'gemini-3.8-flash';
       if (!chave) {
         return NextResponse.json({ sucesso: false, erro: 'Nenhuma Chave de API do Google Gemini informada.' }, { status: 400 });
       }
 
       const modelosParaTestar = Array.from(new Set([
         modelo,
-        'gemini-3.5-flash-lite',
-        'gemini-flash-lite-latest',
-        'gemini-3.1-flash-lite'
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-flash-latest'
       ]));
 
       const genAI = new GoogleGenerativeAI(chave);
@@ -746,6 +868,7 @@ export async function POST(request: Request) {
     if (body.action === 'simular_mensagem' || body.event === 'messages.upsert') {
       const mensagemTexto = body.mensagem || body.data?.message?.conversation || "Olá";
       const remetenteTelefone = (body.telefone || body.sender || (body.data?.key?.remoteJid ? body.data.key.remoteJid.replace('@s.whatsapp.net', '') : "5511999998888")).replace(/\D/g, '');
+      const historicoRecebido = Array.isArray(body.historico) ? body.historico : [];
 
       // Se o cliente já constar no banco com este telefone, usamos o nome oficial cadastrado
       const clienteCadastrado = (db.clientes || []).find(c => c.telefone.replace(/\D/g, '') === remetenteTelefone);
@@ -765,11 +888,12 @@ export async function POST(request: Request) {
             remetenteNome,
             db,
             apiKey,
-            db.configuracoes.modeloGemini || 'gemini-1.5-flash',
-            remetenteTelefone
+            db.configuracoes.modeloGemini || 'gemini-3.8-flash',
+            remetenteTelefone,
+            historicoRecebido
           );
           if (resultado) {
-            motorUtilizado = `google_${db.configuracoes.modeloGemini || 'gemini-1.5-flash'}`;
+            motorUtilizado = `google_${db.configuracoes.modeloGemini || 'gemini-3.8-flash'}`;
           }
         } catch (e) {
           console.warn("Erro ao gerar com Gemini, usando fallback local:", e);
@@ -777,7 +901,7 @@ export async function POST(request: Request) {
       }
 
       if (!resultado) {
-        resultado = gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db, remetenteTelefone);
+        resultado = await gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db, remetenteTelefone);
       }
 
       return NextResponse.json({
