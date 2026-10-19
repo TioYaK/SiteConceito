@@ -151,6 +151,8 @@ export default function Home() {
           ...prev,
           nomeEmpresa: dataWpp.nomeEmpresa || prev.nomeEmpresa,
           telefoneWhatsApp: dataWpp.telefone || prev.telefoneWhatsApp,
+          statusWhatsApp: dataWpp.status || prev.statusWhatsApp,
+          qrCodeAtual: dataWpp.qrCodeAtual ?? prev.qrCodeAtual,
           chavePix: dataWpp.chavePix || prev.chavePix,
           sinalPadrao: dataWpp.sinalPadrao || prev.sinalPadrao,
           iaAtiva: dataWpp.iaAtiva ?? prev.iaAtiva,

@@ -101,11 +101,34 @@ export function RecepcionistaTab({
   const [textoInput, setTextoInput] = useState('');
   const [carregandoResposta, setCarregandoResposta] = useState(false);
 
+  const [qrCodeLive, setQrCodeLive] = useState<string>(configuracoes.qrCodeAtual || '');
+  const [statusLive, setStatusLive] = useState<string>(configuracoes.statusWhatsApp || 'desconectado');
+  const [telefoneLive, setTelefoneLive] = useState<string>(configuracoes.telefoneWhatsApp || '');
+  const [buscandoQr, setBuscandoQr] = useState<boolean>(false);
+
   React.useEffect(() => {
     if (!modalQrAberto) return;
-    const interval = setInterval(() => {
-      if (onMensagemSimuladaEnviada) onMensagemSimuladaEnviada();
-    }, 3000);
+    setBuscandoQr(true);
+
+    const checarStatus = async () => {
+      try {
+        const res = await fetch('/api/whatsapp');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.qrCodeAtual) setQrCodeLive(data.qrCodeAtual);
+          if (data.status) setStatusLive(data.status);
+          if (data.telefone) setTelefoneLive(data.telefone);
+          if (data.status === 'conectado' && onMensagemSimuladaEnviada) {
+            onMensagemSimuladaEnviada();
+          }
+        }
+      } catch (_) {} finally {
+        setBuscandoQr(false);
+      }
+    };
+
+    checarStatus();
+    const interval = setInterval(checarStatus, 2000);
     return () => clearInterval(interval);
   }, [modalQrAberto, onMensagemSimuladaEnviada]);
 
@@ -1161,20 +1184,21 @@ export function RecepcionistaTab({
               </button>
             </div>
 
-            {configuracoes.statusWhatsApp === 'conectado' ? (
+            {(statusLive === 'conectado' || configuracoes.statusWhatsApp === 'conectado') ? (
               <div className="space-y-4 py-2">
                 <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                    Celular Conectado com Sucesso!
+                  <h4 className="font-bold text-slate-900 dark:text-white text-base">
+                    Celular Conectado com Sucesso! 🎉
                   </h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    Número: <strong>{configuracoes.telefoneWhatsApp}</strong>
+                    Número: <strong>{telefoneLive || configuracoes.telefoneWhatsApp}</strong>
                   </p>
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-2">
-                    🟢 Manu IA ativa e atendendo clientes 24/7
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-2 flex items-center justify-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Manu IA ativa e atendendo clientes 24/7
                   </p>
                 </div>
                 <button
@@ -1184,6 +1208,8 @@ export function RecepcionistaTab({
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'desconectar_whatsapp' })
                     });
+                    setStatusLive('desconectado');
+                    setQrCodeLive('');
                     if (onMensagemSimuladaEnviada) onMensagemSimuladaEnviada();
                   }}
                   className="w-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 font-bold text-xs py-2.5 rounded-xl hover:bg-rose-100 transition cursor-pointer"
@@ -1191,45 +1217,35 @@ export function RecepcionistaTab({
                   Desconectar WhatsApp
                 </button>
               </div>
-            ) : configuracoes.qrCodeAtual ? (
+            ) : (qrCodeLive || configuracoes.qrCodeAtual) ? (
               <div className="space-y-3">
-                <div className="p-3 bg-white rounded-2xl inline-block border border-slate-200 shadow-sm">
+                <div className="p-3 bg-white rounded-2xl inline-block border-2 border-emerald-500 shadow-xl">
                   <img
-                    src={configuracoes.qrCodeAtual}
+                    src={qrCodeLive || configuracoes.qrCodeAtual}
                     alt="QR Code WhatsApp Oficial"
-                    className="w-52 h-52 mx-auto"
+                    className="w-60 h-60 mx-auto"
                   />
                 </div>
-                <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300 text-left bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <p className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 text-left bg-emerald-50/70 dark:bg-emerald-950/40 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800">
+                  <p className="font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5 text-xs">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    QR Code Oficial ao Vivo:
+                    Aponte a câmera do WhatsApp agora:
                   </p>
-                  <p>1. Abra o <strong>WhatsApp</strong> no celular da Bruna</p>
+                  <p>1. No celular da Bruna, abra o <strong>WhatsApp</strong></p>
                   <p>2. Vá em <strong>Aparelhos conectados &gt; Conectar um aparelho</strong></p>
-                  <p>3. Aponte a câmera para a imagem acima</p>
+                  <p>3. Aponte a câmera para o QR Code acima</p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-3 py-1 text-left">
-                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs space-y-2">
-                  <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    Como gerar o QR Code oficial:
+              <div className="space-y-4 py-6 text-center">
+                <div className="w-12 h-12 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin mx-auto"></div>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 dark:text-white text-sm">
+                    Carregando QR Code Oficial...
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+                    Conectando com o host local. O QR Code oficial aparecerá aqui na tela para a Bruna escanear em instantes.
                   </p>
-                  <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
-                    Para conectar o número real do celular da Bruna, inicie o micro-worker no seu PC:
-                  </p>
-                  <div className="bg-amber-100/60 dark:bg-amber-900/40 p-2 rounded-xl text-[11px] font-mono font-bold text-slate-800 dark:text-amber-100">
-                    👉 Clique 2x em: iniciar-whatsapp.bat
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-500 space-y-1.5 pl-1">
-                  <p>1. Abra a pasta do projeto no seu PC</p>
-                  <p>2. Dê dois cliques em <strong>iniciar-whatsapp.bat</strong></p>
-                  <p>3. O QR Code oficial aparecerá aqui e no terminal</p>
-                  <p>4. Escaneie pelo WhatsApp em <strong>Aparelhos Conectados</strong></p>
                 </div>
               </div>
             )}

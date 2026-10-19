@@ -634,6 +634,7 @@ export async function GET() {
   const apiKey = db.configuracoes.geminiApiKey || process.env.GEMINI_API_KEY || "";
   return NextResponse.json({
     status: db.configuracoes.statusWhatsApp,
+    qrCodeAtual: db.configuracoes.qrCodeAtual || "",
     iaAtiva: db.configuracoes.iaAtiva,
     telefone: db.configuracoes.telefoneWhatsApp,
     prompt: db.configuracoes.promptRecepcionista,
