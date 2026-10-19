@@ -46,7 +46,8 @@
       "precoTotal": 150,
       "valorSinal": 40,
       "categoria": "Cílios",
-      "ativo": true
+      "ativo": true,
+      "imagemUrl": "https://images.unsplash.com/photo-1583001809873-a128495da465?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "srv-sobrancelhas",
@@ -56,7 +57,8 @@
       "precoTotal": 50,
       "valorSinal": 20,
       "categoria": "Sobrancelhas",
-      "ativo": true
+      "ativo": true,
+      "imagemUrl": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "srv-brow-lamination",
@@ -66,7 +68,8 @@
       "precoTotal": 120,
       "valorSinal": 30,
       "categoria": "Sobrancelhas",
-      "ativo": true
+      "ativo": true,
+      "imagemUrl": "https://images.unsplash.com/photo-1597225244660-1cd128c64284?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "srv-micropigmentacao",
@@ -76,7 +79,8 @@
       "precoTotal": 380,
       "valorSinal": 80,
       "categoria": "Micropigmentação",
-      "ativo": true
+      "ativo": true,
+      "imagemUrl": "https://images.unsplash.com/photo-1560750588-73207b1ef5b8?w=800&auto=format&fit=crop&q=80"
     },
     {
       "id": "srv-limpeza-pele",
@@ -86,7 +90,8 @@
       "precoTotal": 130,
       "valorSinal": 30,
       "categoria": "Estética Facial",
-      "ativo": true
+      "ativo": true,
+      "imagemUrl": "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800&auto=format&fit=crop&q=80"
     }
   ],
   "agendamentos": [],

@@ -34,6 +34,7 @@ interface Servico {
   valorSinal: number;
   categoria: string;
   ativo: boolean;
+  imagemUrl?: string;
 }
 
 interface ItemEstoque {
@@ -455,6 +456,16 @@ export default function CatalogoPublicoPage() {
                     key={srv.id}
                     className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800"
                   >
+                    {srv.imagemUrl && (
+                      <div className="relative w-full h-44 sm:h-52 -mt-1 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        <img 
+                          src={srv.imagemUrl} 
+                          alt={srv.nome} 
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
+                        />
+                      </div>
+                    )}
+
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">

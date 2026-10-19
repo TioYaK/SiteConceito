@@ -18,7 +18,9 @@ import {
   Copy,
   Check,
   Tag,
-  DollarSign
+  DollarSign,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { ItemEstoque } from '@/lib/store';
 
@@ -26,10 +28,19 @@ interface EstoqueTabProps {
   estoque: ItemEstoque[];
   onAjustarQuantidade: (id: string, delta: number) => void;
   onNovoItem: (item: Partial<ItemEstoque>) => void;
+  onEditarItem?: (item: Partial<ItemEstoque> & { id: string }) => void;
+  onExcluirItem?: (id: string) => void;
 }
 
-export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: EstoqueTabProps) {
+export function EstoqueTab({ 
+  estoque, 
+  onAjustarQuantidade, 
+  onNovoItem,
+  onEditarItem,
+  onExcluirItem
+}: EstoqueTabProps) {
   const [modalAberto, setModalAberto] = useState(false);
+  const [itemEditando, setItemEditando] = useState<ItemEstoque | null>(null);
   const [filtroAba, setFiltroAba] = useState<'todos' | 'venda' | 'insumo' | 'alerta'>('todos');
   const [busca, setBusca] = useState('');
   const [itemExpandidoId, setItemExpandidoId] = useState<string | null>(null);
@@ -54,11 +65,50 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
   const valorTotalInvestido = estoque.reduce((acc, item) => acc + (item.quantidade * item.custoUnitario), 0);
   const faturamentoPotencial = produtosVenda.reduce((acc, item) => acc + (item.quantidade * (item.precoVenda || 0)), 0);
 
+  const abrirModalNovo = () => {
+    setItemEditando(null);
+    setNome('');
+    setQuantidade('1');
+    setMinimoAlerta('2');
+    setCustoUnitario('');
+    setTipo('venda_balcao');
+    setPrecoVenda('');
+    setCategoria('Cílios & Olhos');
+    setDescricao('');
+    setBeneficios('');
+    setModoUso('');
+    setModalAberto(true);
+  };
+
+  const abrirModalEditar = (item: ItemEstoque) => {
+    setItemEditando(item);
+    setNome(item.nome);
+    setQuantidade(item.quantidade.toString());
+    setMinimoAlerta(item.minimoAlerta.toString());
+    setCustoUnitario(item.custoUnitario.toString());
+    setTipo(item.tipo);
+    setPrecoVenda(item.precoVenda ? item.precoVenda.toString() : '');
+    setCategoria(item.categoria || 'Cílios & Olhos');
+    setDescricao(item.descricao || '');
+    setBeneficios(item.beneficios || '');
+    setModoUso(item.modoUso || '');
+    setModalAberto(true);
+  };
+
+  const handleExcluir = (id: string, nomeItem: string) => {
+    if (confirm(`Tem certeza que deseja excluir o item "${nomeItem}" do estoque?`)) {
+      if (onExcluirItem) {
+        onExcluirItem(id);
+      }
+      setModalAberto(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim()) return;
 
-    onNovoItem({
+    const dados = {
       nome: nome.trim(),
       quantidade: parseInt(quantidade) || 0,
       minimoAlerta: parseInt(minimoAlerta) || 2,
@@ -69,16 +119,14 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
       descricao: tipo === 'venda_balcao' && descricao.trim() ? descricao.trim() : undefined,
       beneficios: tipo === 'venda_balcao' && beneficios.trim() ? beneficios.trim() : undefined,
       modoUso: tipo === 'venda_balcao' && modoUso.trim() ? modoUso.trim() : undefined
-    });
+    };
 
-    setNome('');
-    setQuantidade('1');
-    setMinimoAlerta('2');
-    setCustoUnitario('');
-    setPrecoVenda('');
-    setDescricao('');
-    setBeneficios('');
-    setModoUso('');
+    if (itemEditando && onEditarItem) {
+      onEditarItem({ id: itemEditando.id, ...dados });
+    } else {
+      onNovoItem(dados);
+    }
+
     setModalAberto(false);
   };
 
@@ -218,16 +266,7 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
           </div>
 
           <button
-            onClick={() => {
-              setTipo('venda_balcao');
-              setNome('');
-              setCustoUnitario('');
-              setPrecoVenda('');
-              setDescricao('');
-              setBeneficios('');
-              setModoUso('');
-              setModalAberto(true);
-            }}
+            onClick={abrirModalNovo}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-emerald-600/20 transition cursor-pointer whitespace-nowrap"
             title="Cadastrar produto que vai aparecer no Catálogo Online da Bio e na IA Manu"
           >
@@ -328,7 +367,8 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
                   </div>
 
                   {/* Botões de Controle de Quantidade */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Botões de Controle de Quantidade e Edição */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => onAjustarQuantidade(item.id, -1)}
                       className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-90 flex items-center justify-center text-slate-700 dark:text-slate-300 font-bold transition cursor-pointer"
@@ -350,6 +390,14 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
                       title="Aumentar"
                     >
                       <Plus className="w-4 h-4 stroke-[2.5]" />
+                    </button>
+
+                    <button
+                      onClick={() => abrirModalEditar(item)}
+                      className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-slate-700 active:scale-90 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold transition cursor-pointer ml-1"
+                      title="Editar informações e valores deste produto"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -433,8 +481,12 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-lg p-5 shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="font-bold text-slate-800 dark:text-white text-base">Novo Item no Catálogo & Estoque</h3>
-                <p className="text-xs text-slate-400">Produtos para venda balcão/WhatsApp são automaticamente aprendidos pela Manu (IA).</p>
+                <h3 className="font-bold text-slate-800 dark:text-white text-base">
+                  {itemEditando ? 'Editar Produto / Insumo' : 'Novo Item no Catálogo & Estoque'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {itemEditando ? 'Atualize preços, estoque e detalhes do produto' : 'Produtos para venda balcão/WhatsApp são automaticamente aprendidos pela Manu (IA).'}
+                </p>
               </div>
               <button
                 onClick={() => setModalAberto(false)}
@@ -740,13 +792,26 @@ export function EstoqueTab({ estoque, onAjustarQuantidade, onNovoItem }: Estoque
                 </div>
               )}
 
-              <button
-                type="submit"
-                className="w-full bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white font-bold text-sm py-3 rounded-2xl shadow-lg transition cursor-pointer mt-2 flex items-center justify-center gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Salvar Produto no Catálogo ✨</span>
-              </button>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {itemEditando && (
+                  <button
+                    type="button"
+                    onClick={() => handleExcluir(itemEditando.id, itemEditando.nome)}
+                    className="px-3.5 py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-100 dark:hover:bg-rose-900/50 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir</span>
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  className="flex-1 bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white font-bold text-sm py-3 rounded-2xl shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{itemEditando ? 'Salvar Alterações ✨' : 'Salvar Produto no Catálogo ✨'}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>

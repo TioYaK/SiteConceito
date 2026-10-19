@@ -250,6 +250,32 @@ export default function Home() {
     }
   };
 
+  const handleEditarServico = async (dados: any) => {
+    try {
+      const res = await fetch('/api/servicos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'editar', ...dados })
+      });
+      if (res.ok) carregarDados();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleExcluirServico = async (id: string) => {
+    try {
+      const res = await fetch('/api/servicos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'excluir', id })
+      });
+      if (res.ok) carregarDados();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const handleAjustarQuantidade = async (id: string, delta: number) => {
     try {
       const res = await fetch('/api/estoque', {
@@ -269,6 +295,32 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dados)
+      });
+      if (res.ok) carregarDados();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleEditarItemEstoque = async (dados: any) => {
+    try {
+      const res = await fetch('/api/estoque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'editar', ...dados })
+      });
+      if (res.ok) carregarDados();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleExcluirItemEstoque = async (id: string) => {
+    try {
+      const res = await fetch('/api/estoque', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'excluir', id })
       });
       if (res.ok) carregarDados();
     } catch (error) {
@@ -473,6 +525,8 @@ export default function Home() {
           <ServicosTab
             servicos={servicos}
             onNovoServico={handleNovoServico}
+            onEditarServico={handleEditarServico}
+            onExcluirServico={handleExcluirServico}
           />
         )}
 
@@ -481,6 +535,8 @@ export default function Home() {
             estoque={estoque}
             onAjustarQuantidade={handleAjustarQuantidade}
             onNovoItem={handleNovoItemEstoque}
+            onEditarItem={handleEditarItemEstoque}
+            onExcluirItem={handleExcluirItemEstoque}
           />
         )}
 

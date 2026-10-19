@@ -11,6 +11,7 @@ export interface Servico {
   valorSinal: number;
   categoria: string;
   ativo: boolean;
+  imagemUrl?: string;
 }
 
 export interface Agendamento {
@@ -55,6 +56,7 @@ export interface ItemEstoque {
   categoria?: string;
   beneficios?: string;
   modoUso?: string;
+  imagemUrl?: string;
 }
 
 export interface Cliente {
