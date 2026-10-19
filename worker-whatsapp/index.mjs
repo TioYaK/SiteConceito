@@ -117,12 +117,16 @@ async function iniciarWhatsApp() {
       // Sincroniza com o Painel Web para exibir o QR Code ao vivo no modal do site!
       try {
         const qrBase64 = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
-        fetch(API_URL, {
+        const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'atualizar_qrcode', qrCode: qrBase64 })
-        }).catch(() => {});
-      } catch (_) {}
+        });
+        const resJson = await res.json().catch(() => ({}));
+        console.log(`🌐 QR Code sincronizado com o site: HTTP ${res.status}`, resJson);
+      } catch (err) {
+        console.error('❌ Erro ao sincronizar QR Code com o site:', err.message);
+      }
     }
 
     if (connection === 'close') {

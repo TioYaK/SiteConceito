@@ -2,7 +2,7 @@
   "configuracoes": {
     "nomeEmpresa": "Studio Bruna Meireles",
     "telefoneWhatsApp": "5511987654321",
-    "statusWhatsApp": "conectado",
+    "statusWhatsApp": "aguardando_qr",
     "chavePix": "11987654321",
     "tipoChavePix": "telefone",
     "sinalPadrao": 30,
