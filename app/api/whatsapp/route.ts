@@ -1145,7 +1145,10 @@ export async function GET() {
     usandoGemini: !!apiKey,
     groqApiKey: groqKey,
     modeloGroq: db.configuracoes.modeloGroq || "openai/gpt-oss-120b",
-    usandoGroq: !!groqKey
+    usandoGroq: !!groqKey,
+    mercadoPagoAtivo: db.configuracoes.mercadoPagoAtivo || false,
+    mercadoPagoAccessToken: db.configuracoes.mercadoPagoAccessToken || process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
+    mercadoPagoPublicKey: db.configuracoes.mercadoPagoPublicKey || process.env.MERCADO_PAGO_PUBLIC_KEY || ""
   });
 }
 

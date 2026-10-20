@@ -852,6 +852,21 @@ export function RecepcionistaTab({
           </span>
         </div>
 
+        {/* Guia Rápido Passo a Passo para a Bruna */}
+        <div className="p-3.5 rounded-2xl bg-sky-50/80 dark:bg-sky-950/40 border border-sky-200/80 dark:border-sky-800/60 text-xs text-sky-900 dark:text-sky-200 space-y-1.5">
+          <p className="font-bold flex items-center gap-1.5 text-sky-800 dark:text-sky-300">
+            <span>💡 Como pegar a chave do Mercado Pago em 3 minutos:</span>
+          </p>
+          <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
+            <li>Clique no botão azul acima <strong>"Obter Token no Mercado Pago"</strong> (ou acesse <code className="bg-sky-100 dark:bg-sky-900 px-1 py-0.5 rounded text-sky-800 dark:text-sky-200">mercadopago.com.br/developers</code>).</li>
+            <li>Faça login na sua conta do Mercado Pago (onde você deseja receber os pagamentos).</li>
+            <li>Vá em <strong>Suas integrações</strong> e abra sua aplicação (ou crie uma chamada <em>Studio Bruna Meireles</em>).</li>
+            <li>No menu lateral, clique em <strong>Credenciais de produção</strong>.</li>
+            <li>Copie o <strong>Access Token</strong> (começa com <code className="font-mono font-bold text-sky-700 dark:text-sky-300">APP_USR-...</code>) e cole no campo abaixo.</li>
+            <li>Clique em <strong>Testar Conexão</strong> e depois em <strong>Salvar Configuração</strong>. Pronto! O dinheiro cai na sua conta Mercado Pago e o sistema confirma os pagamentos automaticamente.</li>
+          </ol>
+        </div>
+
         {/* Formulário de Configuração do Mercado Pago */}
         <form onSubmit={handleSalvarMp} className="space-y-3 pt-1">
           {/* Toggle Ativo */}

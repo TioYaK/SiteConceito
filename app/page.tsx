@@ -162,7 +162,10 @@ export default function Home() {
           geminiApiKey: dataWpp.geminiApiKey ?? prev.geminiApiKey,
           modeloGemini: dataWpp.modeloGemini ?? prev.modeloGemini,
           groqApiKey: dataWpp.groqApiKey ?? prev.groqApiKey,
-          modeloGroq: dataWpp.modeloGroq ?? prev.modeloGroq
+          modeloGroq: dataWpp.modeloGroq ?? prev.modeloGroq,
+          mercadoPagoAtivo: dataWpp.mercadoPagoAtivo ?? prev.mercadoPagoAtivo,
+          mercadoPagoAccessToken: dataWpp.mercadoPagoAccessToken ?? prev.mercadoPagoAccessToken,
+          mercadoPagoPublicKey: dataWpp.mercadoPagoPublicKey ?? prev.mercadoPagoPublicKey
         }));
       }
     } catch (error) {

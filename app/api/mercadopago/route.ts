@@ -95,6 +95,8 @@ export async function POST(request: Request) {
                   number: body.clienteTelefone || ''
                 }
               },
+              external_reference: body.referenciaId || `ref-${Date.now()}`,
+              notification_url: 'https://www.studiobrunameireles.com.br/api/mercadopago/webhook',
               payment_methods: {
                 installments: 12
               },
