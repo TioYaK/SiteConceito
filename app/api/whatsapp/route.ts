@@ -85,6 +85,33 @@ function montarContextoEInstrucaoManu(
   const servicos = db.servicos.filter(s => s.ativo);
   const produtos = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
 
+  const formatarNumeroItem = (index: number) => {
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    return emojis[index] || `${index + 1}️⃣`;
+  };
+
+  const listaServicosFormatada = servicos.map((s, idx) => {
+    const numEmoji = formatarNumeroItem(idx);
+    const desc = s.descricao ? ` – ${s.descricao}` : '';
+    return `${numEmoji} ${s.nome} - R$ ${s.precoTotal.toFixed(2).replace('.', ',')} (Sinal: R$ ${s.valorSinal.toFixed(2).replace('.', ',')}) [Duração: ${s.duracaoMinutos} min]${desc}`;
+  }).join('\n');
+
+  const listaProdutosFormatada = produtos.map((p, idx) => {
+    const numEmoji = formatarNumeroItem(idx);
+    const desc = p.beneficios || p.descricao ? ` (${p.beneficios || p.descricao})` : '';
+    return `${numEmoji} ${p.nome} - R$ ${(p.precoVenda || 45).toFixed(2).replace('.', ',')}${desc}`;
+  }).join('\n');
+
+  const mapeamentoNumerosServicos = servicos.map((s, idx) => 
+    `  • Digitar "${idx + 1}" ou "${formatarNumeroItem(idx)}" ➔ Escolhe "${s.nome}" (ID: "${s.id}", Preço: R$ ${s.precoTotal.toFixed(2).replace('.', ',')}, Sinal: R$ ${s.valorSinal.toFixed(2).replace('.', ',')})`
+  ).join('\n');
+
+  const mapeamentoNumerosProdutos = produtos.map((p, idx) => 
+    `  • Digitar "${idx + 1}" ou "${formatarNumeroItem(idx)}" ➔ Escolhe "${p.nome}" (ID: "${p.id}", Preço: R$ ${(p.precoVenda || 45).toFixed(2).replace('.', ',')})`
+  ).join('\n');
+
+  const nomesServicosCadastrados = servicos.map(s => s.nome).join(', ');
+
   // Agenda ocupada dos próximos 7 dias em tempo real
   const ocupadosProximos7Dias: string[] = [];
   for (let i = 0; i < 7; i++) {
@@ -149,22 +176,20 @@ Horário de atendimento do Studio: de segunda a sábado das ${db.configuracoes.h
   Defina "acao": "nenhuma". Retribua a simpatia com um emoji fofo e pergunte como pode ajudar no dia de hoje.
 
 ═══════════════════════════════════════════════════════════════
-🎯 3. BLINDAGEM DE ESCOPO (SOMENTE CÍLIOS, SOBRANCELHAS E PELE):
+🎯 3. BLINDAGEM DE ESCOPO E ESPECIALIZAÇÃO DO STUDIO:
 ═══════════════════════════════════════════════════════════════
-- O Studio Bruna Meireles é um espaço de alta especialização focado EXCLUSIVAMENTE em:
-  1. Extensão de Cílios (Volume Russo, Clássico Fio a Fio, Híbrido, Manutenção)
-  2. Sobrancelhas (Design com Henna, Brow Lamination, Micropigmentação Shadow)
-  3. Limpeza de Pele Profunda (com vapor de ozônio, extração sem dor e máscara facial calmante)
-- Procedimentos que NÃO REALIZAMOS (Cabelo, Manicure/Unhas, Botox/Injetáveis, Depilação a Laser):
-  Se a cliente perguntar por corte, escova, química de cabelo, unhas de gel, botox, preenchimento labial ou massagens corporais:
-  Explique com carinho que nossa equipe é especializada exclusivamente no embelezamento do olhar e cuidados faciais para garantir o mais alto nível de excelência. Recuse educadamente o procedimento não atendido e convide-a para conhecer nossos cílios ou sobrancelhas! 🌸
+- O Studio '${db.configuracoes.nomeEmpresa}' realiza EXCLUSIVAMENTE os procedimentos ativos cadastrados no seu sistema:
+  👉 ${nomesServicosCadastrados}
+- Procedimentos que NÃO REALIZAMOS: Qualquer procedimento não cadastrado no catálogo ativo (por exemplo: corte de cabelo, tintura/química capilar, unhas em gel/manicure tradicional, botox/injetáveis invasivos, depilação a laser etc.).
+- Se a cliente perguntar por um procedimento que não consta no catálogo ativo cadastrado:
+  Explique com carinho e gentileza que nossa equipe é focada e altamente especializada em ${nomesServicosCadastrados}. Recuse educadamente o serviço não atendido e convide-a com carinho para conhecer nossos procedimentos cadastrados! 🌸
 
 ═══════════════════════════════════════════════════════════════
 🗓️ 4. BLINDAGEM CRÍTICA DE AGENDAMENTOS (PRECISÃO TOTAL):
 ═══════════════════════════════════════════════════════════════
 - Regra 1: Se a cliente disse apenas "quero agendar", "tem horário?", ou ainda não escolheu o procedimento:
   Defina "acao": "nenhuma". NUNCA presuma um serviço por conta própria e NUNCA gere agendamento/PIX prematuro!
-  Apresente com carinho os procedimentos disponíveis OBRIGATORIAMENTE numerados de 1 ao infinito (1️⃣, 2️⃣, 3️⃣...), informando que ela pode responder apenas digitando o número correspondente (ex: '1', '2'...) para facilitar.
+  Apresente com carinho os procedimentos disponíveis OBRIGATORIAMENTE numerados de 1 até ${servicos.length} (1️⃣, 2️⃣, 3️⃣...), informando que ela pode responder apenas digitando o número correspondente (ex: '1', '2'...) para facilitar.
 - Regra 2: Se escolheu o serviço mas ainda não definiu data e horário:
   Defina "acao": "nenhuma". Confirme o procedimento com entusiasmo, mencione o investimento e duração, e pergunte o dia e horário de preferência dentro do expediente.
 - Regra 3: NUNCA ofereça horários no passado (agora são ${horaAtualStr}). Se já passou do expediente de hoje (${db.configuracoes.horarioFechamento}), ofereça horários a partir de amanhã.
@@ -187,32 +212,28 @@ Horário de atendimento do Studio: de segunda a sábado das ${db.configuracoes.h
 - Sinal de Reserva: Obrigatório para travar o horário exclusivo na agenda (abatido no valor total no dia do atendimento).
 
 ═══════════════════════════════════════════════════════════════
-🔢 7. REGRA DE OURO: LISTAGEM NUMERADA DE 1 AO INFINITO (1️⃣, 2️⃣, 3️⃣...) E SELEÇÃO RÁPIDA:
+🔢 7. REGRA DE OURO: CATÁLOGO DINÂMICO NUMERADO DE 1 A ${servicos.length} (ADAPTAÇÃO AUTOMÁTICA EM TEMPO REAL):
 ═══════════════════════════════════════════════════════════════
-- SEMPRE que você listar procedimentos ou produtos, NUNCA use pontinhos ou traços soltos.
-- OBRIGATORIAMENTE numere cada item de 1 ao infinito usando marcadores visuais (1️⃣, 2️⃣, 3️⃣, 4️⃣, 5️⃣, 6️⃣... etc.).
-  Exemplo de Procedimentos:
-  1️⃣ Extensão de Cílios (Volume / Fio a Fio) - R$ 150,00 (Sinal R$ 40,00)
-  2️⃣ Design de Sobrancelhas (com Henna) - R$ 50,00 (Sinal R$ 20,00)
-  3️⃣ Brow Lamination + Design - R$ 120,00 (Sinal R$ 30,00)
-  4️⃣ Micropigmentação de Sobrancelhas - R$ 380,00 (Sinal R$ 80,00)
-  5️⃣ Limpeza de Pele Profunda - R$ 130,00 (Sinal R$ 30,00)
+- O Studio possui atualmente EXATAMENTE ${servicos.length} procedimentos ativos cadastrados.
+- SEMPRE que você listar procedimentos, você DEVE apresentar EXATAMENTE todos os ${servicos.length} itens numerados sequencialmente com marcadores visuais (1️⃣, 2️⃣, 3️⃣... até ${formatarNumeroItem(servicos.length - 1)}):
+${listaServicosFormatada}
 
-  Exemplo de Produtos:
-  1️⃣ Espuma Higienizadora Cílios Pós-Procedimento - R$ 45,00
-  2️⃣ Sérum Fortalecedor e Reparador de Cílios & Sobrancelhas - R$ 55,00
+- MAPEAMENTO EXATO DE CADA NÚMERO PARA CADA PROCEDIMENTO:
+${mapeamentoNumerosServicos}
 
 - CONVITE DE ESCOLHA POR NÚMERO: Sempre que listar opções, convide com carinho:
   "💡 *Dica:* Você pode responder apenas com o *número* da opção desejada (ex: *1*, *2*...) para escolher com rapidez! ✨"
 
-- SE A CLIENTE RESPONDER APENAS UM NÚMERO OU EXPRESSÃO NUMÉRICA (ex: "1", "2", "quero o 1", "opção 2", "o 3", "2 por favor", "procedimento 1"):
-  • O número digitado corresponde DIRETAMENTE ao item da lista numerada acima!
-  • Se o número for de um PROCEDIMENTO (ex: 1 = ${servicos[0]?.nome || 'Extensão de Cílios'}, 2 = ${servicos[1]?.nome || 'Design de Sobrancelhas'}, etc.):
-    - Reconheça imediatamente a escolha desse serviço!
+- SE A CLIENTE RESPONDER APENAS UM NÚMERO OU EXPRESSÃO NUMÉRICA (ex: "1", "2", "quero o 1", "opção 2", "o 3", "2 por favor", "procedimento 1", "#4"):
+  • O número digitado corresponde DIRETAMENTE àquela opção na lista de 1 a ${servicos.length} acima!
+  • Se o número digitado for de 1 a ${servicos.length}:
+    - Reconheça IMEDIATAMENTE a escolha exata daquele procedimento!
     - Elogie a escolha com carinho e entusiasmo.
     - Pergunte qual dia e período (manhã ou tarde) ela prefere dentro do expediente (${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}).
-  • Se a conversa for sobre PRODUTOS e ela digitar um número (ex: 1 = Espuma):
-    - Trate como a escolha confirmada desse produto e pergunte se prefere entrega via motoboy ou retirada no studio.
+  • Se a conversa for sobre PRODUTOS e ela digitar um número (de 1 a ${produtos.length}):
+${listaProdutosFormatada}
+${mapeamentoNumerosProdutos}
+    - Trate como a escolha confirmada daquele produto e pergunte se prefere entrega via motoboy ou retirada no studio.
 
 ENDEREÇO FÍSICO DO STUDIO:
 - Logradouro: ${endereco.logradouro}, nº ${endereco.numero} ${endereco.complemento ? `(${endereco.complemento})` : ''}
@@ -660,6 +681,11 @@ async function gerarRespostaRecepcionista(
   const servicosMencionados = servicos.filter(s => {
     const sNome = normalizar(s.nome);
 
+    // Suporte dinâmico universal: se o serviço novo foi citado por qualquer palavra significativa
+    if (clean.includes(sNome)) return true;
+    const palavrasChave = sNome.split(/[\s,()/-]+/).filter(w => w.length >= 4);
+    if (palavrasChave.some(palavra => clean.includes(palavra))) return true;
+
     if ((clean.includes('limpeza') || clean.includes('pele') || clean.includes('cravo')) && sNome.includes('limpeza')) return true;
     if ((clean.includes('cilio') || clean.includes('fio a fio') || clean.includes('volume') || clean.includes('extensao')) && sNome.includes('cilio')) return true;
     if ((clean.includes('brow') || clean.includes('lamination')) && sNome.includes('brow')) return true;
@@ -671,6 +697,10 @@ async function gerarRespostaRecepcionista(
   // Mapear produtos para venda citados na mensagem atual
   const produtosMencionados = produtosVenda.filter(p => {
     const pNome = normalizar(p.nome);
+    if (clean.includes(pNome)) return true;
+    const palavrasChave = pNome.split(/[\s,()/-]+/).filter(w => w.length >= 4);
+    if (palavrasChave.some(palavra => clean.includes(palavra))) return true;
+
     if ((clean.includes('espuma') || clean.includes('higienizadora') || clean.includes('shampoo')) && pNome.includes('espuma')) return true;
     if ((clean.includes('serum') || clean.includes('oleo') || clean.includes('reparador') || clean.includes('fortalecedor')) && (pNome.includes('serum') || pNome.includes('oleo'))) return true;
     return false;
@@ -697,6 +727,10 @@ async function gerarRespostaRecepcionista(
     const textoHistoricoCompleto = normalizar(historico.map(h => h.text).join(' '));
     const servicoNoHistorico = servicos.find(s => {
       const sNome = normalizar(s.nome);
+      if (textoHistoricoCompleto.includes(sNome)) return true;
+      const palavrasChave = sNome.split(/[\s,()/-]+/).filter(w => w.length >= 4);
+      if (palavrasChave.some(palavra => textoHistoricoCompleto.includes(palavra))) return true;
+
       if ((textoHistoricoCompleto.includes('limpeza') || textoHistoricoCompleto.includes('pele') || textoHistoricoCompleto.includes('cravo')) && sNome.includes('limpeza')) return true;
       if ((textoHistoricoCompleto.includes('cilio') || textoHistoricoCompleto.includes('fio a fio') || textoHistoricoCompleto.includes('volume') || textoHistoricoCompleto.includes('extensao')) && sNome.includes('cilio')) return true;
       if ((textoHistoricoCompleto.includes('brow') || textoHistoricoCompleto.includes('lamination')) && sNome.includes('brow')) return true;
