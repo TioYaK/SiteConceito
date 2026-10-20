@@ -81,12 +81,11 @@ async function gerarRespostaGemini(
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosParaTentar = Array.from(new Set([
+    'gemini-3.5-flash-lite',
     modeloNome,
     'gemini-3.8-flash',
-    'gemini-3.7-flash',
-    'gemini-3.6-flash',
     'gemini-flash-latest'
-  ]));
+  ].filter(Boolean)));
 
   const agora = new Date();
   const horaAtualStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
@@ -310,22 +309,44 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
 
       let formattedHistory: any[] = [];
       if (Array.isArray(historico) && historico.length > 0) {
-        formattedHistory = historico
-          .filter(h => h && h.text && h.text.trim())
-          .map(h => ({
-            role: h.role === 'model' ? 'model' : 'user',
-            parts: [{ text: h.text }]
-          }));
+        let lastRole: 'user' | 'model' | null = null;
+        for (const h of historico) {
+          if (!h || !h.text || !h.text.trim()) continue;
+          const currentRole = h.role === 'model' ? 'model' : 'user';
 
-        while (formattedHistory.length > 0 && formattedHistory[0].role !== 'user') {
-          formattedHistory.shift();
+          if (lastRole === null) {
+            if (currentRole !== 'user') continue;
+            formattedHistory.push({ role: 'user', parts: [{ text: h.text.trim() }] });
+            lastRole = 'user';
+          } else if (currentRole === lastRole) {
+            const lastItem = formattedHistory[formattedHistory.length - 1];
+            lastItem.parts[0].text += `\n${h.text.trim()}`;
+          } else {
+            formattedHistory.push({ role: currentRole, parts: [{ text: h.text.trim() }] });
+            lastRole = currentRole;
+          }
+        }
+
+        // Se o último for 'user', remove para que sendMessage seja o próximo 'user'
+        if (formattedHistory.length > 0 && formattedHistory[formattedHistory.length - 1].role === 'user') {
+          formattedHistory.pop();
         }
       }
 
       const chat = model.startChat({ history: formattedHistory });
       const result = await chat.sendMessage(`Mensagem da cliente ${clienteNome}: "${mensagem}"`);
-      const textoJson = result.response.text();
-      const parsed = JSON.parse(textoJson);
+      const textoRaw = result.response.text();
+      let cleanJson = textoRaw.trim();
+      if (cleanJson.startsWith('```json')) {
+        cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanJson.startsWith('```')) {
+        cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      const matchObj = cleanJson.match(/\{[\s\S]*\}/);
+      if (matchObj) {
+        cleanJson = matchObj[0];
+      }
+      const parsed = JSON.parse(cleanJson);
 
       let agendamentoCriado: Agendamento | null = null;
       let pedidoCriado: Pedido | null = null;
@@ -483,7 +504,8 @@ async function gerarRespostaRecepcionista(
   mensagem: string,
   clienteNome: string,
   db: AppData,
-  clienteTelefone: string = "5511999998888"
+  clienteTelefone: string = "5511999998888",
+  historico: Array<{ role: 'user' | 'model'; text: string }> = []
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
@@ -508,7 +530,7 @@ async function gerarRespostaRecepcionista(
     }
   }
 
-  // Mapear serviços citados
+  // Mapear serviços citados na mensagem atual
   const servicosMencionados = servicos.filter(s => {
     const sNome = normalizar(s.nome);
 
@@ -520,7 +542,7 @@ async function gerarRespostaRecepcionista(
     return false;
   });
 
-  // Mapear produtos para venda citados
+  // Mapear produtos para venda citados na mensagem atual
   const produtosMencionados = produtosVenda.filter(p => {
     const pNome = normalizar(p.nome);
     if ((clean.includes('espuma') || clean.includes('higienizadora') || clean.includes('shampoo')) && pNome.includes('espuma')) return true;
@@ -530,7 +552,6 @@ async function gerarRespostaRecepcionista(
 
   // Se a cliente selecionou por número (ex: "1", "quero o 2")
   if (numeroEscolhido !== null) {
-    // Se o contexto ou intenção for produto
     const ehContextoProduto = clean.includes('produto') || clean.includes('comprar') || clean.includes('levar') || clean.includes('espuma') || clean.includes('serum');
     if (ehContextoProduto && numeroEscolhido <= produtosVenda.length) {
       const prodPorNum = produtosVenda[numeroEscolhido - 1];
@@ -542,6 +563,24 @@ async function gerarRespostaRecepcionista(
       if (!servicosMencionados.some(s => s.id === srvPorNum.id)) {
         servicosMencionados.push(srvPorNum);
       }
+    }
+  }
+
+  // MEMÓRIA CONTEXTUAL: Se a cliente não citou o serviço nesta mensagem mas já citou no histórico, recupera!
+  if (servicosMencionados.length === 0 && Array.isArray(historico) && historico.length > 0) {
+    const textoHistoricoCompleto = normalizar(historico.map(h => h.text).join(' '));
+    const servicoNoHistorico = servicos.find(s => {
+      const sNome = normalizar(s.nome);
+      if ((textoHistoricoCompleto.includes('limpeza') || textoHistoricoCompleto.includes('pele') || textoHistoricoCompleto.includes('cravo')) && sNome.includes('limpeza')) return true;
+      if ((textoHistoricoCompleto.includes('cilio') || textoHistoricoCompleto.includes('fio a fio') || textoHistoricoCompleto.includes('volume') || textoHistoricoCompleto.includes('extensao')) && sNome.includes('cilio')) return true;
+      if ((textoHistoricoCompleto.includes('brow') || textoHistoricoCompleto.includes('lamination')) && sNome.includes('brow')) return true;
+      if ((textoHistoricoCompleto.includes('micro') || textoHistoricoCompleto.includes('pigmentacao') || textoHistoricoCompleto.includes('shadow')) && sNome.includes('micro')) return true;
+      if ((textoHistoricoCompleto.includes('sobrancelha') || textoHistoricoCompleto.includes('henna') || textoHistoricoCompleto.includes('design') || textoHistoricoCompleto.includes('designer')) && sNome.includes('sobrancelha')) return true;
+      return false;
+    });
+
+    if (servicoNoHistorico) {
+      servicosMencionados.push(servicoNoHistorico);
     }
   }
 
@@ -789,11 +828,49 @@ async function gerarRespostaRecepcionista(
     /\b(as|as)\s*(0?[89]|1[0-9]|20)h?\b/.test(clean);
 
   if (ehAgendamento) {
-    // 1. Se a cliente ainda NÃO especificou qual serviço deseja
+    // Cálculo inteligente do dia desejado (hoje, amanhã ou dias da semana)
+    const diasSemanaMap: Record<string, number> = {
+      'domingo': 0,
+      'segunda': 1,
+      'terca': 2,
+      'quarta': 3,
+      'quinta': 4,
+      'sexta': 5,
+      'sabado': 6
+    };
+
+    let diaTexto = 'hoje';
+    let dataEscolhida = new Date().toISOString().split('T')[0];
+
+    if (clean.includes('amanha')) {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      dataEscolhida = d.toISOString().split('T')[0];
+      diaTexto = 'amanhã';
+    } else {
+      for (const [diaNome, diaAlvo] of Object.entries(diasSemanaMap)) {
+        if (clean.includes(diaNome)) {
+          const d = new Date();
+          const diaAtual = d.getDay();
+          let diff = diaAlvo - diaAtual;
+          if (diff <= 0) diff += 7;
+          d.setDate(d.getDate() + diff);
+          dataEscolhida = d.toISOString().split('T')[0];
+          diaTexto = `nesta ${diaNome}-feira (${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})`;
+          break;
+        }
+      }
+    }
+
+    // 1. Se a cliente ainda NÃO especificou qual serviço deseja (nem nesta mensagem nem no histórico)
     if (servicosMencionados.length === 0) {
       const listaSrv = servicos.map((s, idx) => `${formatarNumeroItem(idx)} *${s.nome}* - R$ ${formatarReal(s.precoTotal)} (Sinal R$ ${formatarReal(s.valorSinal)})`).join('\n');
+      const saudacaoDia = diaTexto !== 'hoje' 
+        ? `Temos horários disponíveis ${diaTexto} sim, ${clienteNome}! ✨`
+        : `Olá, ${clienteNome}! 🌸 Vai ser um prazer enorme cuidar de você no *${db.configuracoes.nomeEmpresa}*!`;
+
       return {
-        respostaBot: `Olá, ${clienteNome}! 🌸 Vai ser um prazer enorme cuidar de você no *${db.configuracoes.nomeEmpresa}*!\n\nQual dos nossos procedimentos você gostaria de agendar?\n\n${listaSrv}\n\n💡 *Dica:* Para agilizar, você pode responder apenas digitando o *número* da opção desejada (ex: *1*, *2*...)! ✨🗓️\n\nE para qual dia e período (manhã ou tarde) fica melhor para você? 💕`,
+        respostaBot: `${saudacaoDia}\n\nQual dos nossos procedimentos você gostaria de agendar?\n\n${listaSrv}\n\n💡 *Dica:* Para agilizar, você pode responder apenas digitando o *número* da opção desejada (ex: *1*, *2*...)! ✨🗓️\n\nE para qual período (manhã ou tarde) você prefere? 💕`,
         agendamentoCriado: null
       };
     }
@@ -804,26 +881,18 @@ async function gerarRespostaRecepcionista(
     const matchHorario = clean.match(/\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/);
     const matchHorasSimples = clean.match(/\b(as)\s*(0?[89]|1[0-9]|20)h?\b/);
     const temHorario = !!(matchHorario || matchHorasSimples);
-    const temDia = clean.includes('hoje') || clean.includes('amanha') || clean.includes('segunda') || clean.includes('terca') || clean.includes('quarta') || clean.includes('quinta') || clean.includes('sexta') || clean.includes('sabado') || /\b\d{1,2}\/\d{1,2}\b/.test(clean);
+    const temDia = diaTexto !== 'hoje' || clean.includes('hoje') || clean.includes('amanha') || /\b\d{1,2}\/\d{1,2}\b/.test(clean);
 
     if (!temHorario || !temDia) {
+      const mencaoDia = diaTexto !== 'hoje' ? ` para ${diaTexto}` : '';
       return {
-        respostaBot: `Maravilha, ${clienteNome}! O procedimento *${servicoEncontrado.nome}* é perfeito! 😍\n\n• *Investimento:* R$ ${formatarReal(servicoEncontrado.precoTotal)} (Sinal de R$ ${formatarReal(servicoEncontrado.valorSinal)})\n• *Duração:* cerca de ${servicoEncontrado.duracaoMinutos} min\n\nNosso horário de atendimento é de segunda a sábado das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}. Para qual dia e horário você prefere marcar? 🗓️✨`,
+        respostaBot: `Maravilha, ${clienteNome}! O procedimento *${servicoEncontrado.nome}*${mencaoDia} é perfeito! 😍\n\n• *Investimento:* R$ ${formatarReal(servicoEncontrado.precoTotal)} (Sinal de R$ ${formatarReal(servicoEncontrado.valorSinal)})\n• *Duração:* cerca de ${servicoEncontrado.duracaoMinutos} min\n\nNosso horário de atendimento é de segunda a sábado das ${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}. ${temDia ? 'Qual horário fica melhor para você?' : 'Para qual dia e horário você prefere marcar?'} 🗓️✨`,
         agendamentoCriado: null
       };
     }
 
     // 3. Se especificou serviço E data/horário
     let horarioEscolhido = matchHorario ? matchHorario[0] : `${matchHorasSimples![2].padStart(2, '0')}:00`;
-    let dataEscolhida = new Date().toISOString().split('T')[0];
-    let diaTexto = 'hoje';
-
-    if (clean.includes('amanha')) {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      dataEscolhida = d.toISOString().split('T')[0];
-      diaTexto = 'amanhã';
-    }
 
     const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
     const pixCode = gerarPixCopiaECola(
@@ -981,12 +1050,11 @@ export async function POST(request: Request) {
       }
 
       const modelosParaTestar = Array.from(new Set([
+        'gemini-3.5-flash-lite',
         modelo,
         'gemini-3.8-flash',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
         'gemini-flash-latest'
-      ]));
+      ].filter(Boolean)));
 
       const genAI = new GoogleGenerativeAI(chave);
       let ultimoErro = '';
@@ -1029,17 +1097,18 @@ export async function POST(request: Request) {
 
       if (apiKey && db.configuracoes.iaAtiva) {
         try {
+          const modeloAtivo = db.configuracoes.modeloGemini || 'gemini-3.5-flash-lite';
           resultado = await gerarRespostaGemini(
             mensagemTexto,
             remetenteNome,
             db,
             apiKey,
-            db.configuracoes.modeloGemini || 'gemini-3.8-flash',
+            modeloAtivo,
             remetenteTelefone,
             historicoRecebido
           );
           if (resultado) {
-            motorUtilizado = `google_${db.configuracoes.modeloGemini || 'gemini-3.8-flash'}`;
+            motorUtilizado = `google_${modeloAtivo}`;
           }
         } catch (e) {
           console.warn("Erro ao gerar com Gemini, usando fallback local:", e);
@@ -1047,7 +1116,13 @@ export async function POST(request: Request) {
       }
 
       if (!resultado) {
-        resultado = await gerarRespostaRecepcionista(mensagemTexto, remetenteNome, db, remetenteTelefone);
+        resultado = await gerarRespostaRecepcionista(
+          mensagemTexto,
+          remetenteNome,
+          db,
+          remetenteTelefone,
+          historicoRecebido
+        );
       }
 
       return NextResponse.json({
