@@ -226,10 +226,24 @@ async function iniciarWhatsApp() {
 
         if (!texto || !texto.trim()) continue;
 
-        const telefone = remoteJid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        // Resolução inteligente de Telefone e WhatsApp LID:
+        // Se o cliente não estiver nos contatos do WhatsApp ou usar privacidade, o WhatsApp mascara como LID (ex: 199712439275521@lid)
+        const isLid = remoteJid.endsWith('@lid');
+        let telefoneReal = '';
+
+        if (msg.key?.senderPn) {
+          telefoneReal = msg.key.senderPn.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        } else if (msg.key?.participantPn) {
+          telefoneReal = msg.key.participantPn.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        } else if (msg.key?.remoteJidAlt && !msg.key.remoteJidAlt.endsWith('@lid')) {
+          telefoneReal = msg.key.remoteJidAlt.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        }
+
+        const rawDigits = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/\D/g, '');
+        const telefone = telefoneReal || rawDigits;
         const nomeCliente = msg.pushName || 'Cliente';
 
-        console.log(`\n📩 [Mensagem Recebida] de ${nomeCliente} (${telefone}):`);
+        console.log(`\n📩 [Mensagem Recebida] de ${nomeCliente} (${telefoneReal ? telefoneReal : (isLid ? `LID WhatsApp: ${telefone}` : telefone)}):`);
         console.log(`   "${texto.trim()}"`);
 
         // Debounce: se a cliente enviar várias frases em poucos segundos, agrupa em uma só
@@ -267,6 +281,8 @@ async function iniciarWhatsApp() {
                 mensagem: textosParaProcessar,
                 clienteNome: nomeCliente,
                 telefone: telefone,
+                isLid: isLid || (!telefoneReal && rawDigits.length > 13),
+                remoteJid: remoteJid,
                 historico: historico
               })
             });

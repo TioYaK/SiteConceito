@@ -84,7 +84,11 @@ export function ClientesTab({
   const [nomeArquivoCarregado, setNomeArquivoCarregado] = useState<string | null>(null);
 
   const formatarTelefoneVisual = (raw: string) => {
+    if (!raw) return 'Não informado';
     let clean = raw.replace(/\D/g, '');
+    if (clean.length > 13) {
+      return `WhatsApp ID: ...${clean.slice(-6)} (Pendente)`;
+    }
     if (clean.length === 10 || clean.length === 11) {
       clean = '55' + clean;
     }
@@ -665,7 +669,7 @@ export function ClientesTab({
 
                       <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1 flex-wrap">
                         <span className="flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-slate-400" /> {c.telefone}
+                          <Phone className="w-3 h-3 text-slate-400" /> {formatarTelefoneVisual(c.telefone)}
                         </span>
 
                         {c.dataNascimento && (
@@ -693,12 +697,17 @@ export function ClientesTab({
                       </div>
 
                       {/* Endereço Cadastrado */}
-                      {c.endereco && (
+                      {c.endereco ? (
                         <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mt-1">
                           <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                           <span className="truncate">
                             {c.endereco} {c.cep ? `(CEP: ${c.cep})` : ''}
                           </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500 italic mt-0.5">
+                          <MapPin className="w-3 h-3 text-slate-300 dark:text-slate-600 shrink-0" />
+                          <span>Endereço pendente na ficha</span>
                         </div>
                       )}
 

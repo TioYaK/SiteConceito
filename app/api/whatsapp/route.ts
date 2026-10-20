@@ -72,7 +72,9 @@ function gerarPixCopiaECola(
 
 function montarContextoEInstrucaoManu(
   db: AppData,
-  clienteNome: string
+  clienteNome: string,
+  clienteTelefone?: string,
+  isLid?: boolean
 ) {
   const agora = new Date();
   const horaAtualStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
@@ -258,6 +260,24 @@ ${mapeamentoNumerosProdutos}
 ═══════════════════════════════════════════════════════════════
 ${db.configuracoes.promptRecepcionista || 'Atender com simpatia, elegância e foco em excelência e conversão de agendamentos.'}
 
+═══════════════════════════════════════════════════════════════
+📋 11. FICHA VIP E RECOLHIMENTO DE DADOS CADASTRAIS (CLIENTES):
+═══════════════════════════════════════════════════════════════
+- Identificador no WhatsApp recebido: "${clienteNome}" (${clienteTelefone || 'desconhecido'}) ${isLid ? '⚠️ (WhatsApp LID Privado - Telefone real não exposto pelo WhatsApp)' : ''}
+
+REGRAS DE OURO PARA O CADASTRO COMPLETO DA CLIENTE:
+1. Frequentemente no WhatsApp o nome recebido é o nome de uma empresa (ex: "${clienteNome}"), apelido ou primeiro nome, e o telefone pode vir mascarado pelo WhatsApp como LID privado.
+2. Quando a cliente demonstrar interesse em agendar ou estiver fechando um horário/produto:
+   Peça com muita simpatia, delicadeza e acolhimento:
+   "Para eu já deixar sua *Ficha VIP* prontinha e completa no sistema do Studio com todo carinho, por favor me confirma seu *Nome Completo*, seu *WhatsApp de contato com DDD* e seu *Bairro/Endereço*! ✨🌸"
+3. Sempre que a cliente fornecer nome civil, telefone real, endereço/bairro ou data de nascimento, preencha OBRIGATORIAMENTE o campo "dadosCliente" no JSON:
+   • "nomeCompleto": Nome civil real da cliente (ex: se o perfil é "${clienteNome}", mas ela disse "Meu nome é Mariana Sauro", use "Mariana Sauro").
+   • "telefone": O número real de WhatsApp fornecido por ela com DDD (ex: "67998875520").
+   • "endereco": O logradouro, número e/ou bairro informado por ela.
+   • "cep": O CEP se informado.
+   • "dataNascimento": Aniversário se informado (para o Clube das Aniversariantes).
+4. Assim que a cliente informar o nome dela, passe a chamá-la pelo nome real com todo carinho e elegância!
+
 ENDEREÇO FÍSICO DO STUDIO:
 - Logradouro: ${endereco.logradouro}, nº ${endereco.numero} ${endereco.complemento ? `(${endereco.complemento})` : ''}
 - Bairro: ${endereco.bairro} - ${endereco.cidade}/${endereco.estado} (CEP: ${endereco.cep})
@@ -319,7 +339,8 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
     "endereco": "Rua..."
   },
   "dadosCliente": {
-    "nomeCompleto": "Nome Completo",
+    "nomeCompleto": "Nome Completo Real da Cliente",
+    "telefone": "WhatsApp com DDD informado pela cliente",
     "dataNascimento": "DD/MM ou YYYY-MM-DD",
     "endereco": "Rua, número, bairro",
     "cep": "00000-000"
@@ -338,30 +359,45 @@ async function processarRetornoIA(
   servicos: Servico[],
   produtos: ItemEstoque[],
   frete: any,
-  hojeStr: string
+  hojeStr: string,
+  isLid?: boolean
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
   let agendamentoCriado: Agendamento | null = null;
   let pedidoCriado: Pedido | null = null;
   let respostaFinal = parsed.respostaWhatsApp || "";
+
+  // 1. Tratamento inteligente de Nome e Telefone reais extraídos pela IA
+  const nomeExtraido = parsed.dadosCliente?.nomeCompleto?.trim();
+  const nomeValido = (nomeExtraido && nomeExtraido.length > 1 && !['Cliente', 'Amiga'].includes(nomeExtraido))
+    ? nomeExtraido
+    : clienteNome;
+
+  const telExtraido = parsed.dadosCliente?.telefone ? parsed.dadosCliente.telefone.replace(/\D/g, '') : '';
+  const telefoneRealIdentificado = (telExtraido && telExtraido.length >= 10 && telExtraido.length <= 13)
+    ? telExtraido
+    : '';
+
+  // Telefone para salvar no cadastro e agendamento (prioriza o telefone real sobre qualquer LID)
+  const telefoneParaContato = telefoneRealIdentificado || (!isLid && clienteTelefone && clienteTelefone.length <= 13 ? clienteTelefone : '') || clienteTelefone;
 
   // Se a IA decidiu criar um agendamento
   if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
     const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
     const dataAg = parsed.dadosAgendamento.data || hojeStr;
     const horarioAg = parsed.dadosAgendamento.horario || "14:00";
-    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+    const chavePixOficial = db.configuracoes.chavePix || '67996203089';
 
     const pixCode = gerarPixCopiaECola(
       chavePixOficial,
       db.configuracoes.nomeEmpresa,
-      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      db.configuracoes.endereco?.cidade || 'Dourados',
       srv.valorSinal
     );
 
     agendamentoCriado = {
       id: `ag-${Date.now()}`,
-      clienteNome,
-      clienteTelefone: clienteTelefone || "5511999998888",
+      clienteNome: nomeValido,
+      clienteTelefone: telefoneParaContato || "5567999998888",
       servicoId: srv.id,
       servicoNome: srv.nome,
       data: dataAg,
@@ -392,24 +428,24 @@ async function processarRetornoIA(
     const valorItens = (prod.precoVenda || 45.0) * qtd;
     const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
     const valorTotal = valorItens + valorFrete;
-    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+    const chavePixOficial = db.configuracoes.chavePix || '67996203089';
 
     const pixCode = gerarPixCopiaECola(
       chavePixOficial,
       db.configuracoes.nomeEmpresa,
-      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      db.configuracoes.endereco?.cidade || 'Dourados',
       valorTotal
     );
 
     if (!db.pedidos) db.pedidos = [];
     pedidoCriado = {
       id: `ped-${Date.now()}`,
-      clienteNome,
-      clienteTelefone: clienteTelefone || "5511999998888",
+      clienteNome: nomeValido,
+      clienteTelefone: telefoneParaContato || "5567999998888",
       itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
       tipoEntrega,
-      endereco: parsed.dadosPedido.endereco || '',
-      cep: parsed.dadosPedido.cep || '',
+      endereco: parsed.dadosCliente?.endereco || parsed.dadosPedido?.endereco || '',
+      cep: parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '',
       valorItens,
       valorFrete,
       valorTotal,
@@ -428,41 +464,50 @@ async function processarRetornoIA(
     }
   }
 
-  // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
+  // Se a IA extraiu dados cadastrais (Nome Completo, Telefone, Aniversário, Endereço):
   if (parsed.dadosCliente || agendamentoCriado || pedidoCriado) {
     if (!db.clientes) db.clientes = [];
-    const nomeIdentificado = parsed.dadosCliente?.nomeCompleto || clienteNome;
     const dataNascIdentificada = parsed.dadosCliente?.dataNascimento || '';
     const enderecoIdentificado = parsed.dadosCliente?.endereco || parsed.dadosPedido?.endereco || '';
     const cepIdentificado = parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '';
 
-    const clienteExistente = db.clientes.find(c =>
-      (clienteTelefone && c.telefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
-      c.nome.toLowerCase() === nomeIdentificado.toLowerCase() ||
-      c.nome.toLowerCase() === clienteNome.toLowerCase()
-    );
+    // Procura se cliente já existe pelo telefone real, pelo LID, ou pelo nome
+    const clienteExistente = db.clientes.find(c => {
+      const cTel = (c.telefone || '').replace(/\D/g, '');
+      if (telefoneRealIdentificado && cTel === telefoneRealIdentificado) return true;
+      if (clienteTelefone && cTel === clienteTelefone.replace(/\D/g, '')) return true;
+      if (nomeValido && c.nome.toLowerCase() === nomeValido.toLowerCase()) return true;
+      if (clienteNome && c.nome.toLowerCase() === clienteNome.toLowerCase()) return true;
+      return false;
+    });
 
     if (clienteExistente) {
-      if (parsed.dadosCliente?.nomeCompleto) clienteExistente.nome = parsed.dadosCliente.nomeCompleto;
-      if (clienteTelefone) clienteExistente.telefone = clienteTelefone;
+      if (nomeExtraido && nomeExtraido.length > 1 && !['Cliente', 'Amiga'].includes(nomeExtraido)) {
+        clienteExistente.nome = nomeExtraido;
+      }
+      if (telefoneRealIdentificado) {
+        clienteExistente.telefone = telefoneRealIdentificado;
+      } else if (!clienteExistente.telefone && telefoneParaContato) {
+        clienteExistente.telefone = telefoneParaContato;
+      }
       if (dataNascIdentificada) clienteExistente.dataNascimento = dataNascIdentificada;
       if (enderecoIdentificado) clienteExistente.endereco = enderecoIdentificado;
       if (cepIdentificado) clienteExistente.cep = cepIdentificado;
       if (agendamentoCriado) clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
       if (pedidoCriado) clienteExistente.totalGasto = (clienteExistente.totalGasto || 0) + pedidoCriado.valorTotal;
       await saveDb(db);
-    } else if (nomeIdentificado && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado)) {
+    } else if (nomeValido && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado || telefoneRealIdentificado)) {
       db.clientes.unshift({
         id: `cli-${Date.now()}`,
-        nome: nomeIdentificado,
-        telefone: clienteTelefone || "5511999998888",
+        nome: nomeValido,
+        telefone: telefoneParaContato || "5567999998888",
         dataNascimento: dataNascIdentificada,
         endereco: enderecoIdentificado,
         cep: cepIdentificado,
         ultimaVisita: hojeStr,
         totalAtendimentos: agendamentoCriado ? 1 : 0,
         totalGasto: agendamentoCriado ? agendamentoCriado.valorTotal : (pedidoCriado ? pedidoCriado.valorTotal : 0),
-        observacoes: `Cadastrada via WhatsApp com Manu (IA). Aniversário: ${dataNascIdentificada || 'Pendente'}`
+        observacoes: `Cadastrada via WhatsApp com Manu (IA).${dataNascIdentificada ? ` Aniversário: ${dataNascIdentificada}` : ''}`
       });
       await saveDb(db);
     }
@@ -485,9 +530,10 @@ async function gerarRespostaGroq(
   apiKey: string,
   modeloNome: string = 'openai/gpt-oss-120b',
   clienteTelefone: string = '5511999998888',
-  historico: Array<{ role: 'user' | 'model'; text: string }> = []
+  historico: Array<{ role: 'user' | 'model'; text: string }> = [],
+  isLid?: boolean
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
-  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome);
+  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome, clienteTelefone, isLid);
   const modelosParaTentar = Array.from(new Set([
     modeloNome,
     'openai/gpt-oss-120b',
@@ -561,7 +607,8 @@ async function gerarRespostaGroq(
         servicos,
         produtos,
         frete,
-        hojeStr
+        hojeStr,
+        isLid
       );
     } catch (err) {
       console.warn(`Tentativa Groq com modelo ${m} falhou:`, err);
@@ -578,9 +625,10 @@ async function gerarRespostaGemini(
   apiKey: string,
   modeloNome: string = 'gemini-3.8-flash',
   clienteTelefone: string = '5511999998888',
-  historico: Array<{ role: 'user' | 'model'; text: string }> = []
+  historico: Array<{ role: 'user' | 'model'; text: string }> = [],
+  isLid?: boolean
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
-  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome);
+  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome, clienteTelefone, isLid);
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosParaTentar = Array.from(new Set([
     'gemini-3.5-flash-lite',
@@ -649,7 +697,8 @@ async function gerarRespostaGemini(
         servicos,
         produtos,
         frete,
-        hojeStr
+        hojeStr,
+        isLid
       );
     } catch (error) {
       console.warn(`Tentativa com modelo ${m} falhou:`, error);
@@ -675,7 +724,8 @@ async function gerarRespostaRecepcionista(
   clienteNome: string,
   db: AppData,
   clienteTelefone: string = "5511999998888",
-  historico: Array<{ role: 'user' | 'model'; text: string }> = []
+  historico: Array<{ role: 'user' | 'model'; text: string }> = [],
+  isLid?: boolean
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
@@ -1077,18 +1127,19 @@ async function gerarRespostaRecepcionista(
     // 3. Se especificou serviço E data/horário
     let horarioEscolhido = matchHorario ? matchHorario[0] : `${matchHorasSimples![2].padStart(2, '0')}:00`;
 
-    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+    const chavePixOficial = db.configuracoes.chavePix || '67996203089';
     const pixCode = gerarPixCopiaECola(
       chavePixOficial,
       db.configuracoes.nomeEmpresa,
-      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      db.configuracoes.endereco?.cidade || 'Dourados',
       servicoEncontrado.valorSinal
     );
 
+    const telefoneParaContato = (!isLid && clienteTelefone && clienteTelefone.length <= 13 ? clienteTelefone : '') || clienteTelefone;
     const novoAgendamento: Agendamento = {
       id: `ag-${Date.now()}`,
       clienteNome,
-      clienteTelefone: clienteTelefone || "5511999998888",
+      clienteTelefone: telefoneParaContato || "5567999998888",
       servicoId: servicoEncontrado.id,
       servicoNome: servicoEncontrado.nome,
       data: dataEscolhida,
@@ -1105,6 +1156,29 @@ async function gerarRespostaRecepcionista(
     };
 
     db.agendamentos.push(novoAgendamento);
+
+    // Garante que o cliente seja criado ou atualizado no cadastro
+    if (!db.clientes) db.clientes = [];
+    const clienteExistente = db.clientes.find(c =>
+      (clienteTelefone && c.telefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
+      c.nome.toLowerCase() === clienteNome.toLowerCase()
+    );
+    if (clienteExistente) {
+      clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
+    } else {
+      db.clientes.unshift({
+        id: `cli-${Date.now()}`,
+        nome: clienteNome,
+        telefone: telefoneParaContato || "5567999998888",
+        dataNascimento: "",
+        endereco: "",
+        cep: "",
+        ultimaVisita: new Date().toISOString().split('T')[0],
+        totalAtendimentos: 1,
+        totalGasto: servicoEncontrado.precoTotal,
+        observacoes: "Cadastrada via WhatsApp com Manu (IA)"
+      });
+    }
     await saveDb(db);
 
     return {
@@ -1315,11 +1389,16 @@ export async function POST(request: Request) {
 
     if (body.action === 'simular_mensagem' || body.event === 'messages.upsert') {
       const mensagemTexto = body.mensagem || body.data?.message?.conversation || "Olá";
-      const remetenteTelefone = (body.telefone || body.sender || (body.data?.key?.remoteJid ? body.data.key.remoteJid.replace('@s.whatsapp.net', '') : "5511999998888")).replace(/\D/g, '');
+      const rawTelefone = (body.telefone || body.sender || (body.data?.key?.remoteJid ? body.data.key.remoteJid.replace('@s.whatsapp.net', '') : "5511999998888"));
+      const remetenteTelefone = rawTelefone.replace(/\D/g, '');
+      const isLid = !!body.isLid || (body.remoteJid && body.remoteJid.endsWith('@lid')) || remetenteTelefone.length > 13;
       const historicoRecebido = Array.isArray(body.historico) ? body.historico : [];
 
-      // Se o cliente já constar no banco com este telefone, usamos o nome oficial cadastrado
-      const clienteCadastrado = (db.clientes || []).find(c => c.telefone.replace(/\D/g, '') === remetenteTelefone);
+      // Se o cliente já constar no banco com este telefone (não LID), usamos o nome oficial cadastrado
+      const clienteCadastrado = (db.clientes || []).find(c => 
+        (remetenteTelefone && !isLid && c.telefone.replace(/\D/g, '') === remetenteTelefone) ||
+        (body.clienteNome && c.nome.toLowerCase() === body.clienteNome.toLowerCase())
+      );
       let remetenteNome = body.clienteNome;
       if (!remetenteNome || remetenteNome === 'Mariana (Teste)' || remetenteNome === 'Cliente') {
         remetenteNome = clienteCadastrado?.nome || body.clienteNome || "Cliente";
@@ -1341,7 +1420,8 @@ export async function POST(request: Request) {
             groqKey,
             modeloGroq,
             remetenteTelefone,
-            historicoRecebido
+            historicoRecebido,
+            isLid
           );
           if (resultado) {
             motorUtilizado = `groq_${modeloGroq}`;
@@ -1362,7 +1442,8 @@ export async function POST(request: Request) {
             geminiKey,
             modeloAtivo,
             remetenteTelefone,
-            historicoRecebido
+            historicoRecebido,
+            isLid
           );
           if (resultado) {
             motorUtilizado = `google_${modeloAtivo}`;
@@ -1379,7 +1460,8 @@ export async function POST(request: Request) {
           remetenteNome,
           db,
           remetenteTelefone,
-          historicoRecebido
+          historicoRecebido,
+          isLid
         );
       }
 

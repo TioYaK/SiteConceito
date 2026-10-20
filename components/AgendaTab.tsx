@@ -208,6 +208,10 @@ export function AgendaTab({
 
   const abrirWhatsApp = (agendamento: Agendamento) => {
     const tel = agendamento.clienteTelefone.replace(/\D/g, '');
+    if (tel.length > 13) {
+      alert(`O agendamento de "${agendamento.clienteNome}" foi registrado via WhatsApp com ID de privacidade (${tel}). O número oficial com DDD pode ser completado na aba Clientes.`);
+      return;
+    }
     let msg = '';
 
     if (agendamento.status === 'aguardando_sinal') {
