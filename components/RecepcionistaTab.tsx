@@ -54,13 +54,22 @@ export function RecepcionistaTab({
   const [configSalvaComSucesso, setConfigSalvaComSucesso] = useState(false);
   const [modalQrAberto, setModalQrAberto] = useState(false);
 
+  // Estados do Groq AI (Llama 3.3 70B & GPT-OSS 120B - 100% Gratuito)
+  const [groqApiKeyInput, setGroqApiKeyInput] = useState(configuracoes.groqApiKey || '');
+  const [modeloGroqInput, setModeloGroqInput] = useState(configuracoes.modeloGroq || 'openai/gpt-oss-120b');
+  const [mostrarGroqKey, setMostrarGroqKey] = useState(false);
+  const [testandoGroq, setTestandoGroq] = useState(false);
+  const [resultadoTesteGroq, setResultadoTesteGroq] = useState<{ sucesso: boolean; mensagem?: string; erro?: string } | null>(null);
+
   // Estados do Google Gemini Pro
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState(configuracoes.geminiApiKey || '');
   const [modeloGeminiInput, setModeloGeminiInput] = useState(configuracoes.modeloGemini || 'gemini-3.8-flash');
   const [mostrarKey, setMostrarKey] = useState(false);
   const [testandoGemini, setTestandoGemini] = useState(false);
   const [resultadoTesteGemini, setResultadoTesteGemini] = useState<{ sucesso: boolean; mensagem?: string; erro?: string } | null>(null);
-  const [motorAtivoNoChat, setMotorAtivoNoChat] = useState<string>(configuracoes.geminiApiKey ? 'google_gemini' : 'local');
+  const [motorAtivoNoChat, setMotorAtivoNoChat] = useState<string>(
+    configuracoes.groqApiKey ? 'groq_ia' : (configuracoes.geminiApiKey ? 'google_gemini' : 'local')
+  );
 
   // Estados do Mercado Pago
   const [mpAtivoInput, setMpAtivoInput] = useState(configuracoes.mercadoPagoAtivo ?? false);
@@ -131,6 +140,52 @@ export function RecepcionistaTab({
     const interval = setInterval(checarStatus, 2000);
     return () => clearInterval(interval);
   }, [modalQrAberto, onMensagemSimuladaEnviada]);
+
+  const handleTestarGroq = async () => {
+    if (!groqApiKeyInput.trim()) {
+      setResultadoTesteGroq({ sucesso: false, erro: 'Digite ou cole sua chave de API do Groq antes de testar.' });
+      return;
+    }
+    setTestandoGroq(true);
+    setResultadoTesteGroq(null);
+    try {
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'testar_groq',
+          groqApiKey: groqApiKeyInput.trim(),
+          modeloGroq: modeloGroqInput
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.sucesso) {
+        setResultadoTesteGroq({ sucesso: true, mensagem: data.mensagem });
+        setMotorAtivoNoChat('groq_ia');
+        onSalvarConfig({
+          groqApiKey: groqApiKeyInput.trim(),
+          modeloGroq: modeloGroqInput
+        });
+      } else {
+        setResultadoTesteGroq({ sucesso: false, erro: data.erro || 'Não foi possível validar a chave com o Groq.' });
+      }
+    } catch {
+      setResultadoTesteGroq({ sucesso: false, erro: 'Erro de conexão com o servidor.' });
+    } finally {
+      setTestandoGroq(false);
+    }
+  };
+
+  const handleSalvarGroq = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSalvarConfig({
+      groqApiKey: groqApiKeyInput.trim(),
+      modeloGroq: modeloGroqInput
+    });
+    setMotorAtivoNoChat(groqApiKeyInput.trim() ? 'groq_ia' : (geminiApiKeyInput.trim() ? 'google_gemini' : 'local'));
+    setResultadoTesteGroq({ sucesso: true, mensagem: 'Configuração do Groq AI salva com sucesso!' });
+    setTimeout(() => setResultadoTesteGroq(null), 3500);
+  };
 
   const handleTestarGemini = async () => {
     if (!geminiApiKeyInput.trim()) {
@@ -458,6 +513,147 @@ export function RecepcionistaTab({
               )}
             </button>
           </div>
+        </form>
+      </div>
+
+      {/* CARD GROQ AI ENGINE (100% GRATUITO & ULTRA RÁPIDO) */}
+      <div className="bg-gradient-to-br from-emerald-900/10 via-teal-900/5 to-cyan-900/10 dark:from-emerald-950/40 dark:via-teal-950/20 dark:to-cyan-950/30 rounded-3xl p-5 border border-emerald-200/60 dark:border-emerald-800/60 shadow-sm space-y-4 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-600 to-cyan-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 flex-shrink-0">
+              <Zap className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-1.5">
+                  Groq AI (Llama 3.3 70B & GPT-OSS 120B)
+                </h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  configuracoes.groqApiKey 
+                    ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700' 
+                    : 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                }`}>
+                  {configuracoes.groqApiKey ? '⚡ Groq Ativo (100% Gratuito)' : '⚡ Disponível'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                IA de altíssima velocidade e inteligência para a Manu. 100% gratuita, sem cartão, sem recargas mínimas de R$ 200 e sem travas de faturamento!
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="https://console.groq.com/keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="self-start sm:self-center px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+          >
+            <span>Gerar Chave Gratuita no Groq</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        {/* Formulário de Configuração do Groq */}
+        <form onSubmit={handleSalvarGroq} className="space-y-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Input da Chave */}
+            <div className="sm:col-span-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Chave da API do Groq (API Key):
+              </label>
+              <div className="relative">
+                <input
+                  type={mostrarGroqKey ? "text" : "password"}
+                  placeholder="gsk_... (cole sua chave do Groq aqui)"
+                  value={groqApiKeyInput}
+                  onChange={(e) => setGroqApiKeyInput(e.target.value)}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-3 pr-10 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarGroqKey(!mostrarGroqKey)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                >
+                  {mostrarGroqKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Seleção do Modelo */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Modelo do Groq:
+              </label>
+              <select
+                value={modeloGroqInput}
+                onChange={(e) => setModeloGroqInput(e.target.value)}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="openai/gpt-oss-120b">GPT-OSS 120B (Recomendado - 120B Parâmetros 🏆)</option>
+                <option value="qwen/qwen3.8-27b">Qwen 3.8 27B (Ultra Rápido & Conversacional ⚡)</option>
+                <option value="openai/gpt-oss-20b">GPT-OSS 20B (Leve & Ágil 🚀)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Botões de Ação */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <span className="text-[11px] text-slate-400 italic">
+              O Groq responde em menos de 0.5s e oferece até 14.400 mensagens gratuitas por dia!
+            </span>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTestarGroq}
+                disabled={testandoGroq}
+                className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {testandoGroq ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Testando com o Groq...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Testar Conexão</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:opacity-95 text-white text-xs font-bold transition shadow-sm cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Salvar Chave Groq</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Resultado do Teste */}
+          {resultadoTesteGroq && (
+            <div className={`p-3 rounded-2xl text-xs flex items-start gap-2.5 animate-fade-in ${
+              resultadoTesteGroq.sucesso
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
+                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-200 dark:border-rose-800'
+            }`}>
+              {resultadoTesteGroq.sucesso ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1">
+                <p className="font-bold">
+                  {resultadoTesteGroq.sucesso ? 'Groq AI Conectado com Sucesso!' : 'Falha na Conexão com Groq:'}
+                </p>
+                <p className="mt-0.5 text-[11px] opacity-90">
+                  {resultadoTesteGroq.mensagem || resultadoTesteGroq.erro}
+                </p>
+              </div>
+            </div>
+          )}
         </form>
       </div>
 
@@ -1049,7 +1245,7 @@ export function RecepcionistaTab({
               <div className="flex items-center gap-2">
                 <h4 className="font-bold text-sm leading-none">Manu • Recepcionista Virtual</h4>
                 <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-semibold text-emerald-100 flex items-center gap-1">
-                  {motorAtivoNoChat.startsWith('google') ? '✨ Gemini Pro' : '⚡ Motor Inteligente'}
+                  {motorAtivoNoChat.startsWith('groq') ? '⚡ Groq AI (Ultra Rápido)' : motorAtivoNoChat.startsWith('google') ? '✨ Gemini Pro' : '⚡ Motor Inteligente'}
                 </span>
               </div>
               <span className="text-[10px] text-emerald-200 flex items-center gap-1 mt-0.5">

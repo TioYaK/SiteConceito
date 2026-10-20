@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb, saveDb, Agendamento, Servico, Pedido, AppData } from '@/lib/store';
+import { getDb, saveDb, Agendamento, Servico, Pedido, ItemEstoque, AppData } from '@/lib/store';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 /**
@@ -70,23 +70,10 @@ function gerarPixCopiaECola(
   return `${payloadSemCrc}${crcHex}`;
 }
 
-async function gerarRespostaGemini(
-  mensagem: string,
-  clienteNome: string,
+function montarContextoEInstrucaoManu(
   db: AppData,
-  apiKey: string,
-  modeloNome: string = 'gemini-3.8-flash',
-  clienteTelefone: string = '5511999998888',
-  historico: Array<{ role: 'user' | 'model'; text: string }> = []
-): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const modelosParaTentar = Array.from(new Set([
-    'gemini-3.5-flash-lite',
-    modeloNome,
-    'gemini-3.8-flash',
-    'gemini-flash-latest'
-  ].filter(Boolean)));
-
+  clienteNome: string
+) {
   const agora = new Date();
   const horaAtualStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
   const dataAtualFormatada = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' });
@@ -296,6 +283,268 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
 }
 `;
 
+  return { promptSistema, servicos, produtos, frete, endereco, hojeStr };
+}
+
+async function processarRetornoIA(
+  parsed: any,
+  db: AppData,
+  clienteNome: string,
+  clienteTelefone: string,
+  servicos: Servico[],
+  produtos: ItemEstoque[],
+  frete: any,
+  hojeStr: string
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
+  let agendamentoCriado: Agendamento | null = null;
+  let pedidoCriado: Pedido | null = null;
+  let respostaFinal = parsed.respostaWhatsApp || "";
+
+  // Se a IA decidiu criar um agendamento
+  if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
+    const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
+    const dataAg = parsed.dadosAgendamento.data || hojeStr;
+    const horarioAg = parsed.dadosAgendamento.horario || "14:00";
+    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+
+    const pixCode = gerarPixCopiaECola(
+      chavePixOficial,
+      db.configuracoes.nomeEmpresa,
+      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      srv.valorSinal
+    );
+
+    agendamentoCriado = {
+      id: `ag-${Date.now()}`,
+      clienteNome,
+      clienteTelefone: clienteTelefone || "5511999998888",
+      servicoId: srv.id,
+      servicoNome: srv.nome,
+      data: dataAg,
+      horario: horarioAg,
+      duracaoMinutos: srv.duracaoMinutos,
+      valorTotal: srv.precoTotal,
+      valorSinal: srv.valorSinal,
+      sinalPago: false,
+      status: 'aguardando_sinal',
+      pixCodigo: pixCode,
+      criadoVia: 'whatsapp_ia',
+      createdAt: new Date().toISOString()
+    };
+
+    db.agendamentos.push(agendamentoCriado);
+    await saveDb(db);
+
+    if (!respostaFinal.includes(pixCode)) {
+      respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+    }
+  }
+
+  // Se a IA decidiu criar um pedido de produto
+  if (parsed.acao === 'criar_pedido_produto' && parsed.dadosPedido?.produtoId) {
+    const prod = produtos.find(p => p.id === parsed.dadosPedido.produtoId) || produtos[0];
+    const qtd = parsed.dadosPedido.quantidade || 1;
+    const tipoEntrega = parsed.dadosPedido.tipoEntrega || 'motoboy';
+    const valorItens = (prod.precoVenda || 45.0) * qtd;
+    const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
+    const valorTotal = valorItens + valorFrete;
+    const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
+
+    const pixCode = gerarPixCopiaECola(
+      chavePixOficial,
+      db.configuracoes.nomeEmpresa,
+      db.configuracoes.endereco?.cidade || 'SAO PAULO',
+      valorTotal
+    );
+
+    if (!db.pedidos) db.pedidos = [];
+    pedidoCriado = {
+      id: `ped-${Date.now()}`,
+      clienteNome,
+      clienteTelefone: clienteTelefone || "5511999998888",
+      itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
+      tipoEntrega,
+      endereco: parsed.dadosPedido.endereco || '',
+      cep: parsed.dadosPedido.cep || '',
+      valorItens,
+      valorFrete,
+      valorTotal,
+      status: 'aguardando_pix',
+      pixCodigo: pixCode,
+      pago: false,
+      createdAt: new Date().toISOString()
+    };
+
+    prod.quantidade = Math.max(0, prod.quantidade - qtd);
+    db.pedidos.unshift(pedidoCriado);
+    await saveDb(db);
+
+    if (!respostaFinal.includes(pixCode)) {
+      respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+    }
+  }
+
+  // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
+  if (parsed.dadosCliente || agendamentoCriado || pedidoCriado) {
+    if (!db.clientes) db.clientes = [];
+    const nomeIdentificado = parsed.dadosCliente?.nomeCompleto || clienteNome;
+    const dataNascIdentificada = parsed.dadosCliente?.dataNascimento || '';
+    const enderecoIdentificado = parsed.dadosCliente?.endereco || parsed.dadosPedido?.endereco || '';
+    const cepIdentificado = parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '';
+
+    const clienteExistente = db.clientes.find(c =>
+      (clienteTelefone && c.telefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
+      c.nome.toLowerCase() === nomeIdentificado.toLowerCase() ||
+      c.nome.toLowerCase() === clienteNome.toLowerCase()
+    );
+
+    if (clienteExistente) {
+      if (parsed.dadosCliente?.nomeCompleto) clienteExistente.nome = parsed.dadosCliente.nomeCompleto;
+      if (clienteTelefone) clienteExistente.telefone = clienteTelefone;
+      if (dataNascIdentificada) clienteExistente.dataNascimento = dataNascIdentificada;
+      if (enderecoIdentificado) clienteExistente.endereco = enderecoIdentificado;
+      if (cepIdentificado) clienteExistente.cep = cepIdentificado;
+      if (agendamentoCriado) clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
+      if (pedidoCriado) clienteExistente.totalGasto = (clienteExistente.totalGasto || 0) + pedidoCriado.valorTotal;
+      await saveDb(db);
+    } else if (nomeIdentificado && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado)) {
+      db.clientes.unshift({
+        id: `cli-${Date.now()}`,
+        nome: nomeIdentificado,
+        telefone: clienteTelefone || "5511999998888",
+        dataNascimento: dataNascIdentificada,
+        endereco: enderecoIdentificado,
+        cep: cepIdentificado,
+        ultimaVisita: hojeStr,
+        totalAtendimentos: agendamentoCriado ? 1 : 0,
+        totalGasto: agendamentoCriado ? agendamentoCriado.valorTotal : (pedidoCriado ? pedidoCriado.valorTotal : 0),
+        observacoes: `Cadastrada via WhatsApp com Manu (IA). Aniversário: ${dataNascIdentificada || 'Pendente'}`
+      });
+      await saveDb(db);
+    }
+  }
+
+  return {
+    respostaBot: respostaFinal,
+    agendamentoCriado,
+    pedidoCriado
+  };
+}
+
+/**
+ * Motor Groq AI: Ultra Rápido, 100% Gratuito (Llama 3.3 70B / GPT-OSS 120B)
+ */
+async function gerarRespostaGroq(
+  mensagem: string,
+  clienteNome: string,
+  db: AppData,
+  apiKey: string,
+  modeloNome: string = 'openai/gpt-oss-120b',
+  clienteTelefone: string = '5511999998888',
+  historico: Array<{ role: 'user' | 'model'; text: string }> = []
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
+  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome);
+  const modelosParaTentar = Array.from(new Set([
+    modeloNome,
+    'openai/gpt-oss-120b',
+    'qwen/qwen3.8-27b',
+    'openai/gpt-oss-20b'
+  ].filter(Boolean)));
+
+  const messages: any[] = [
+    { role: 'system', content: promptSistema }
+  ];
+
+  if (Array.isArray(historico) && historico.length > 0) {
+    for (const h of historico) {
+      if (!h || !h.text || !h.text.trim()) continue;
+      messages.push({
+        role: h.role === 'model' ? 'assistant' : 'user',
+        content: h.text.trim()
+      });
+    }
+  }
+
+  messages.push({
+    role: 'user',
+    content: `Mensagem da cliente ${clienteNome}: "${mensagem}"`
+  });
+
+  for (const m of modelosParaTentar) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: m,
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: 0.5,
+          max_tokens: 1024
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`Groq modelo ${m} falhou com status ${res.status}:`, errText);
+        continue;
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content;
+      if (!rawText) continue;
+
+      let cleanJson = rawText.trim();
+      if (cleanJson.startsWith('```json')) {
+        cleanJson = cleanJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanJson.startsWith('```')) {
+        cleanJson = cleanJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      const matchObj = cleanJson.match(/\{[\s\S]*\}/);
+      if (matchObj) {
+        cleanJson = matchObj[0];
+      }
+      const parsed = JSON.parse(cleanJson);
+
+      return await processarRetornoIA(
+        parsed,
+        db,
+        clienteNome,
+        clienteTelefone,
+        servicos,
+        produtos,
+        frete,
+        hojeStr
+      );
+    } catch (err) {
+      console.warn(`Tentativa Groq com modelo ${m} falhou:`, err);
+    }
+  }
+
+  return null;
+}
+
+async function gerarRespostaGemini(
+  mensagem: string,
+  clienteNome: string,
+  db: AppData,
+  apiKey: string,
+  modeloNome: string = 'gemini-3.8-flash',
+  clienteTelefone: string = '5511999998888',
+  historico: Array<{ role: 'user' | 'model'; text: string }> = []
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
+  const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome);
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const modelosParaTentar = Array.from(new Set([
+    'gemini-3.5-flash-lite',
+    modeloNome,
+    'gemini-3.8-flash',
+    'gemini-flash-latest'
+  ].filter(Boolean)));
+
   for (const m of modelosParaTentar) {
     try {
       const model = genAI.getGenerativeModel({
@@ -348,144 +597,21 @@ FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
       }
       const parsed = JSON.parse(cleanJson);
 
-      let agendamentoCriado: Agendamento | null = null;
-      let pedidoCriado: Pedido | null = null;
-      let respostaFinal = parsed.respostaWhatsApp || "";
-
-      // Se a IA decidiu criar um agendamento
-      if (parsed.acao === 'criar_agendamento' && parsed.dadosAgendamento?.servicoId) {
-        const srv = servicos.find(s => s.id === parsed.dadosAgendamento.servicoId) || servicos[0];
-        const dataAg = parsed.dadosAgendamento.data || hojeStr;
-        const horarioAg = parsed.dadosAgendamento.horario || "14:00";
-        const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
-
-        const pixCode = gerarPixCopiaECola(
-          chavePixOficial,
-          db.configuracoes.nomeEmpresa,
-          db.configuracoes.endereco?.cidade || 'SAO PAULO',
-          srv.valorSinal
-        );
-
-        agendamentoCriado = {
-          id: `ag-${Date.now()}`,
-          clienteNome,
-          clienteTelefone: clienteTelefone || "5511999998888",
-          servicoId: srv.id,
-          servicoNome: srv.nome,
-          data: dataAg,
-          horario: horarioAg,
-          duracaoMinutos: srv.duracaoMinutos,
-          valorTotal: srv.precoTotal,
-          valorSinal: srv.valorSinal,
-          sinalPago: false,
-          status: 'aguardando_sinal',
-          pixCodigo: pixCode,
-          criadoVia: 'whatsapp_ia',
-          createdAt: new Date().toISOString()
-        };
-
-        db.agendamentos.push(agendamentoCriado);
-        await saveDb(db);
-
-        if (!respostaFinal.includes(pixCode)) {
-          respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
-        }
-      }
-
-      // Se a IA decidiu criar um pedido de produto
-      if (parsed.acao === 'criar_pedido_produto' && parsed.dadosPedido?.produtoId) {
-        const prod = produtos.find(p => p.id === parsed.dadosPedido.produtoId) || produtos[0];
-        const qtd = parsed.dadosPedido.quantidade || 1;
-        const tipoEntrega = parsed.dadosPedido.tipoEntrega || 'motoboy';
-        const valorItens = (prod.precoVenda || 45.0) * qtd;
-        const valorFrete = tipoEntrega === 'motoboy' ? (valorItens >= frete.freteGratisAcimaDe ? 0 : frete.taxaMotoboy) : tipoEntrega === 'correios' ? 18.50 : 0.0;
-        const valorTotal = valorItens + valorFrete;
-        const chavePixOficial = db.configuracoes.chavePix || clienteTelefone || '67996203089';
-
-        const pixCode = gerarPixCopiaECola(
-          chavePixOficial,
-          db.configuracoes.nomeEmpresa,
-          db.configuracoes.endereco?.cidade || 'SAO PAULO',
-          valorTotal
-        );
-
-        if (!db.pedidos) db.pedidos = [];
-        pedidoCriado = {
-          id: `ped-${Date.now()}`,
-          clienteNome,
-          clienteTelefone: clienteTelefone || "5511999998888",
-          itens: [{ produtoId: prod.id, nome: prod.nome, quantidade: qtd, precoUnitario: prod.precoVenda || 45.0 }],
-          tipoEntrega,
-          endereco: parsed.dadosPedido.endereco || '',
-          cep: parsed.dadosPedido.cep || '',
-          valorItens,
-          valorFrete,
-          valorTotal,
-          status: 'aguardando_pix',
-          pixCodigo: pixCode,
-          pago: false,
-          createdAt: new Date().toISOString()
-        };
-
-        prod.quantidade = Math.max(0, prod.quantidade - qtd);
-        db.pedidos.unshift(pedidoCriado);
-        await saveDb(db);
-
-        if (!respostaFinal.includes(pixCode)) {
-          respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
-        }
-      }
-
-      // Se a IA extraiu dados cadastrais (Nome Completo, Aniversário, Endereço):
-    if (parsed.dadosCliente || agendamentoCriado || pedidoCriado) {
-      if (!db.clientes) db.clientes = [];
-      const nomeIdentificado = parsed.dadosCliente?.nomeCompleto || clienteNome;
-      const dataNascIdentificada = parsed.dadosCliente?.dataNascimento || '';
-      const enderecoIdentificado = parsed.dadosCliente?.endereco || parsed.dadosPedido?.endereco || '';
-      const cepIdentificado = parsed.dadosCliente?.cep || parsed.dadosPedido?.cep || '';
-
-      const clienteExistente = db.clientes.find(c =>
-        (clienteTelefone && c.telefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
-        c.nome.toLowerCase() === nomeIdentificado.toLowerCase() ||
-        c.nome.toLowerCase() === clienteNome.toLowerCase()
+      return await processarRetornoIA(
+        parsed,
+        db,
+        clienteNome,
+        clienteTelefone,
+        servicos,
+        produtos,
+        frete,
+        hojeStr
       );
-
-      if (clienteExistente) {
-        if (parsed.dadosCliente?.nomeCompleto) clienteExistente.nome = parsed.dadosCliente.nomeCompleto;
-        if (clienteTelefone) clienteExistente.telefone = clienteTelefone;
-        if (dataNascIdentificada) clienteExistente.dataNascimento = dataNascIdentificada;
-        if (enderecoIdentificado) clienteExistente.endereco = enderecoIdentificado;
-        if (cepIdentificado) clienteExistente.cep = cepIdentificado;
-        if (agendamentoCriado) clienteExistente.totalAtendimentos = (clienteExistente.totalAtendimentos || 0) + 1;
-        if (pedidoCriado) clienteExistente.totalGasto = (clienteExistente.totalGasto || 0) + pedidoCriado.valorTotal;
-        await saveDb(db);
-      } else if (nomeIdentificado && (dataNascIdentificada || enderecoIdentificado || agendamentoCriado || pedidoCriado)) {
-        db.clientes.unshift({
-          id: `cli-${Date.now()}`,
-          nome: nomeIdentificado,
-          telefone: clienteTelefone || "5511999998888",
-          dataNascimento: dataNascIdentificada,
-          endereco: enderecoIdentificado,
-          cep: cepIdentificado,
-          ultimaVisita: hojeStr,
-          totalAtendimentos: agendamentoCriado ? 1 : 0,
-          totalGasto: agendamentoCriado ? agendamentoCriado.valorTotal : (pedidoCriado ? pedidoCriado.valorTotal : 0),
-          observacoes: `Cadastrada via WhatsApp com Manu (IA). Aniversário: ${dataNascIdentificada || 'Pendente'}`
-        });
-        await saveDb(db);
-      }
+    } catch (error) {
+      console.warn(`Tentativa com modelo ${m} falhou:`, error);
     }
-
-    return {
-      respostaBot: respostaFinal,
-      agendamentoCriado,
-      pedidoCriado
-    };
-  } catch (error) {
-    console.warn(`Tentativa com modelo ${m} falhou:`, error);
   }
-}
-return null;
+  return null;
 }
 
 function normalizar(texto: string): string {
@@ -968,6 +1094,7 @@ async function gerarRespostaRecepcionista(
 export async function GET() {
   const db = await getDb();
   const apiKey = db.configuracoes.geminiApiKey || process.env.GEMINI_API_KEY || "";
+  const groqKey = db.configuracoes.groqApiKey || process.env.GROQ_API_KEY || "";
   return NextResponse.json({
     status: db.configuracoes.statusWhatsApp,
     qrCodeAtual: db.configuracoes.qrCodeAtual || "",
@@ -980,8 +1107,11 @@ export async function GET() {
     endereco: db.configuracoes.endereco,
     frete: db.configuracoes.frete,
     geminiApiKey: apiKey,
-    modeloGemini: db.configuracoes.modeloGemini || "gemini-1.5-flash",
-    usandoGemini: !!apiKey
+    modeloGemini: db.configuracoes.modeloGemini || "gemini-3.8-flash",
+    usandoGemini: !!apiKey,
+    groqApiKey: groqKey,
+    modeloGroq: db.configuracoes.modeloGroq || "openai/gpt-oss-120b",
+    usandoGroq: !!groqKey
   });
 }
 
@@ -1038,8 +1168,52 @@ export async function POST(request: Request) {
       if (body.frete) db.configuracoes.frete = { ...db.configuracoes.frete, ...body.frete };
       if (body.geminiApiKey !== undefined) db.configuracoes.geminiApiKey = body.geminiApiKey;
       if (body.modeloGemini !== undefined) db.configuracoes.modeloGemini = body.modeloGemini;
+      if (body.groqApiKey !== undefined) db.configuracoes.groqApiKey = body.groqApiKey;
+      if (body.modeloGroq !== undefined) db.configuracoes.modeloGroq = body.modeloGroq;
       await saveDb(db);
       return NextResponse.json(db.configuracoes);
+    }
+
+    if (body.action === 'testar_groq') {
+      const chave = body.groqApiKey || process.env.GROQ_API_KEY || db.configuracoes.groqApiKey;
+      const modelo = body.modeloGroq || db.configuracoes.modeloGroq || 'openai/gpt-oss-120b';
+      if (!chave) {
+        return NextResponse.json({ sucesso: false, erro: 'Nenhuma Chave de API do Groq informada.' }, { status: 400 });
+      }
+
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${chave}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: modelo,
+            messages: [{ role: 'user', content: 'Diga em uma frase elegante que a Manu e a IA Groq estão conectadas e prontas para atender as clientes do Studio Bruna Meireles ✨' }],
+            max_tokens: 150
+          })
+        });
+
+        const data = await res.json();
+        if (data.choices && data.choices[0]) {
+          return NextResponse.json({
+            sucesso: true,
+            mensagem: data.choices[0].message.content.trim(),
+            modelo
+          });
+        } else {
+          return NextResponse.json({
+            sucesso: false,
+            erro: data.error?.message || 'Falha ao conectar na API do Groq.'
+          }, { status: 500 });
+        }
+      } catch (err: any) {
+        return NextResponse.json({
+          sucesso: false,
+          erro: err.message || 'Erro de conexão com o Groq.'
+        }, { status: 500 });
+      }
     }
 
     if (body.action === 'testar_gemini') {
@@ -1092,17 +1266,40 @@ export async function POST(request: Request) {
       }
 
       let resultado: { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null = null;
-      const apiKey = process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
+      const groqKey = process.env.GROQ_API_KEY || db.configuracoes.groqApiKey;
+      const geminiKey = process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
       let motorUtilizado = 'local';
 
-      if (apiKey && db.configuracoes.iaAtiva) {
+      // 1ª Prioridade: GROQ AI (Llama 3.3 70B / GPT-OSS 120B - 100% Gratuito, Sem Saldo Inicial e Ultra Rápido)
+      if (groqKey && db.configuracoes.iaAtiva) {
+        try {
+          const modeloGroq = db.configuracoes.modeloGroq || 'openai/gpt-oss-120b';
+          resultado = await gerarRespostaGroq(
+            mensagemTexto,
+            remetenteNome,
+            db,
+            groqKey,
+            modeloGroq,
+            remetenteTelefone,
+            historicoRecebido
+          );
+          if (resultado) {
+            motorUtilizado = `groq_${modeloGroq}`;
+          }
+        } catch (e) {
+          console.warn("Erro ao gerar com Groq, tentando Gemini:", e);
+        }
+      }
+
+      // 2ª Prioridade: GOOGLE GEMINI (se Groq não estiver configurado ou falhar)
+      if (!resultado && geminiKey && db.configuracoes.iaAtiva) {
         try {
           const modeloAtivo = db.configuracoes.modeloGemini || 'gemini-3.5-flash-lite';
           resultado = await gerarRespostaGemini(
             mensagemTexto,
             remetenteNome,
             db,
-            apiKey,
+            geminiKey,
             modeloAtivo,
             remetenteTelefone,
             historicoRecebido
@@ -1115,6 +1312,7 @@ export async function POST(request: Request) {
         }
       }
 
+      // 3ª Prioridade: MOTOR LOCAL INTELIGENTE BLINDADO (Contingência Total)
       if (!resultado) {
         resultado = await gerarRespostaRecepcionista(
           mensagemTexto,

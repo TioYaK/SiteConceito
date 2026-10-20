@@ -160,7 +160,9 @@ export default function Home() {
           endereco: dataWpp.endereco || prev.endereco,
           frete: dataWpp.frete || prev.frete,
           geminiApiKey: dataWpp.geminiApiKey ?? prev.geminiApiKey,
-          modeloGemini: dataWpp.modeloGemini ?? prev.modeloGemini
+          modeloGemini: dataWpp.modeloGemini ?? prev.modeloGemini,
+          groqApiKey: dataWpp.groqApiKey ?? prev.groqApiKey,
+          modeloGroq: dataWpp.modeloGroq ?? prev.modeloGroq
         }));
       }
     } catch (error) {

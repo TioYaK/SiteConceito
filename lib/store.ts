@@ -143,6 +143,8 @@ export interface Configuracoes {
   frete: FreteConfig;
   geminiApiKey?: string;
   modeloGemini?: string;
+  groqApiKey?: string;
+  modeloGroq?: string;
   mercadoPagoAtivo?: boolean;
   mercadoPagoAccessToken?: string;
   mercadoPagoPublicKey?: string;
@@ -217,6 +219,8 @@ const INITIAL_DATA: AppData = {
     },
     geminiApiKey: process.env.GEMINI_API_KEY || "",
     modeloGemini: "gemini-3.8-flash",
+    groqApiKey: process.env.GROQ_API_KEY || "",
+    modeloGroq: "openai/gpt-oss-120b",
     mercadoPagoAtivo: false,
     mercadoPagoAccessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || "",
     mercadoPagoPublicKey: process.env.MERCADO_PAGO_PUBLIC_KEY || ""
