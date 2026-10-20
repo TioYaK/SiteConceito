@@ -178,7 +178,7 @@ Horário de atendimento do Studio: de segunda a sábado das ${db.configuracoes.h
 ═══════════════════════════════════════════════════════════════
 - Regra 1: Se a cliente disse apenas "quero agendar", "tem horário?", ou ainda não escolheu o procedimento:
   Defina "acao": "nenhuma". NUNCA presuma um serviço por conta própria e NUNCA gere agendamento/PIX prematuro!
-  Apresente com carinho os procedimentos disponíveis e pergunte qual ela prefere e para qual dia/período.
+  Apresente com carinho os procedimentos disponíveis OBRIGATORIAMENTE numerados de 1 ao infinito (1️⃣, 2️⃣, 3️⃣...), informando que ela pode responder apenas digitando o número correspondente (ex: '1', '2'...) para facilitar.
 - Regra 2: Se escolheu o serviço mas ainda não definiu data e horário:
   Defina "acao": "nenhuma". Confirme o procedimento com entusiasmo, mencione o investimento e duração, e pergunte o dia e horário de preferência dentro do expediente.
 - Regra 3: NUNCA ofereça horários no passado (agora são ${horaAtualStr}). Se já passou do expediente de hoje (${db.configuracoes.horarioFechamento}), ofereça horários a partir de amanhã.
@@ -200,6 +200,34 @@ Horário de atendimento do Studio: de segunda a sábado das ${db.configuracoes.h
 - Clube das Aniversariantes: Aniversariantes do mês ganham 10% de desconto no procedimento (apresentando documento na recepção)! 🎂✨
 - Sinal de Reserva: Obrigatório para travar o horário exclusivo na agenda (abatido no valor total no dia do atendimento).
 
+═══════════════════════════════════════════════════════════════
+🔢 7. REGRA DE OURO: LISTAGEM NUMERADA DE 1 AO INFINITO (1️⃣, 2️⃣, 3️⃣...) E SELEÇÃO RÁPIDA:
+═══════════════════════════════════════════════════════════════
+- SEMPRE que você listar procedimentos ou produtos, NUNCA use pontinhos ou traços soltos.
+- OBRIGATORIAMENTE numere cada item de 1 ao infinito usando marcadores visuais (1️⃣, 2️⃣, 3️⃣, 4️⃣, 5️⃣, 6️⃣... etc.).
+  Exemplo de Procedimentos:
+  1️⃣ Extensão de Cílios (Volume / Fio a Fio) - R$ 150,00 (Sinal R$ 40,00)
+  2️⃣ Design de Sobrancelhas (com Henna) - R$ 50,00 (Sinal R$ 20,00)
+  3️⃣ Brow Lamination + Design - R$ 120,00 (Sinal R$ 30,00)
+  4️⃣ Micropigmentação de Sobrancelhas - R$ 380,00 (Sinal R$ 80,00)
+  5️⃣ Limpeza de Pele Profunda - R$ 130,00 (Sinal R$ 30,00)
+
+  Exemplo de Produtos:
+  1️⃣ Espuma Higienizadora Cílios Pós-Procedimento - R$ 45,00
+  2️⃣ Sérum Fortalecedor e Reparador de Cílios & Sobrancelhas - R$ 55,00
+
+- CONVITE DE ESCOLHA POR NÚMERO: Sempre que listar opções, convide com carinho:
+  "💡 *Dica:* Você pode responder apenas com o *número* da opção desejada (ex: *1*, *2*...) para escolher com rapidez! ✨"
+
+- SE A CLIENTE RESPONDER APENAS UM NÚMERO OU EXPRESSÃO NUMÉRICA (ex: "1", "2", "quero o 1", "opção 2", "o 3", "2 por favor", "procedimento 1"):
+  • O número digitado corresponde DIRETAMENTE ao item da lista numerada acima!
+  • Se o número for de um PROCEDIMENTO (ex: 1 = ${servicos[0]?.nome || 'Extensão de Cílios'}, 2 = ${servicos[1]?.nome || 'Design de Sobrancelhas'}, etc.):
+    - Reconheça imediatamente a escolha desse serviço!
+    - Elogie a escolha com carinho e entusiasmo.
+    - Pergunte qual dia e período (manhã ou tarde) ela prefere dentro do expediente (${db.configuracoes.horarioAbertura} às ${db.configuracoes.horarioFechamento}).
+  • Se a conversa for sobre PRODUTOS e ela digitar um número (ex: 1 = Espuma):
+    - Trate como a escolha confirmada desse produto e pergunte se prefere entrega via motoboy ou retirada no studio.
+
 ENDEREÇO FÍSICO DO STUDIO:
 - Logradouro: ${endereco.logradouro}, nº ${endereco.numero} ${endereco.complemento ? `(${endereco.complemento})` : ''}
 - Bairro: ${endereco.bairro} - ${endereco.cidade}/${endereco.estado} (CEP: ${endereco.cep})
@@ -216,11 +244,12 @@ PERSONALIDADE & TOM DE VOZ:
 - Fale em português brasileiro de forma natural, ágil e prestativa.
 - Trate sempre a cliente pelo nome (${clienteNome}).
 
-SERVIÇOS OFERECIDOS (CATÁLOGO FECHADO - NUNCA INVENTE OUTROS):
-${JSON.stringify(servicos.map(s => ({ id: s.id, nome: s.nome, preco: s.precoTotal, sinal: s.valorSinal, duracao: `${s.duracaoMinutos} min`, descricao: s.descricao })))}
+SERVIÇOS OFERECIDOS (CATÁLOGO FECHADO NUMERADO DE 1 AO INFINITO):
+${JSON.stringify(servicos.map((s, idx) => ({ numero: idx + 1, id: s.id, nome: s.nome, preco: s.precoTotal, sinal: s.valorSinal, duracao: `${s.duracaoMinutos} min`, descricao: s.descricao })))}
 
-PRODUTOS HOME-CARE DISPONÍVEIS PARA VENDA (APRESENTE COM CARINHO E EXPLIQUE OS BENEFÍCIOS):
-${JSON.stringify(produtos.map(p => ({
+PRODUTOS HOME-CARE DISPONÍVEIS PARA VENDA (NUMERADOS DE 1 AO INFINITO):
+${JSON.stringify(produtos.map((p, idx) => ({
+  numero: idx + 1,
   id: p.id,
   nome: p.nome,
   preco: p.precoVenda,
@@ -460,6 +489,25 @@ async function gerarRespostaRecepcionista(
   const servicos = db.servicos.filter(s => s.ativo);
   const produtosVenda = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
 
+  // Helper para formatar números de 1 ao infinito em marcadores visuais
+  const formatarNumeroItem = (index: number) => {
+    const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+    return emojis[index] || `${index + 1}️⃣`;
+  };
+
+  // Mapear se a cliente digitou uma opção numérica (ex: "1", "quero o 2", "opção 3", "2 pfv", "o 1", "#2")
+  let numeroEscolhido: number | null = null;
+  const matchNumeroIsolado = clean.match(/(?:^|\b)(?:opcao|opção|numero|número|procedimento|servico|serviço|item|quero\s+o|quero\s+a)?\s*#?\s*([1-9]\d*)\s*(?:pfv|por\s+favor|obg|obrigado)?(?:\b|$)/i);
+  const ehHorario = /\b(0?[89]|1[0-9]|20):[0-5][0-9]\b/.test(clean) || /\b(as)\s*(\d+)h?\b/.test(clean) || /\b\d+h\b/.test(clean);
+  const ehCep = /\b\d{5}-?\d{3}\b/.test(clean);
+
+  if (matchNumeroIsolado && !ehHorario && !ehCep) {
+    const n = parseInt(matchNumeroIsolado[1], 10);
+    if (!isNaN(n) && n > 0) {
+      numeroEscolhido = n;
+    }
+  }
+
   // Mapear serviços citados
   const servicosMencionados = servicos.filter(s => {
     const sNome = normalizar(s.nome);
@@ -479,6 +527,23 @@ async function gerarRespostaRecepcionista(
     if ((clean.includes('serum') || clean.includes('oleo') || clean.includes('reparador') || clean.includes('fortalecedor')) && (pNome.includes('serum') || pNome.includes('oleo'))) return true;
     return false;
   });
+
+  // Se a cliente selecionou por número (ex: "1", "quero o 2")
+  if (numeroEscolhido !== null) {
+    // Se o contexto ou intenção for produto
+    const ehContextoProduto = clean.includes('produto') || clean.includes('comprar') || clean.includes('levar') || clean.includes('espuma') || clean.includes('serum');
+    if (ehContextoProduto && numeroEscolhido <= produtosVenda.length) {
+      const prodPorNum = produtosVenda[numeroEscolhido - 1];
+      if (!produtosMencionados.some(p => p.id === prodPorNum.id)) {
+        produtosMencionados.push(prodPorNum);
+      }
+    } else if (numeroEscolhido <= servicos.length) {
+      const srvPorNum = servicos[numeroEscolhido - 1];
+      if (!servicosMencionados.some(s => s.id === srvPorNum.id)) {
+        servicosMencionados.push(srvPorNum);
+      }
+    }
+  }
 
   // -1. TRATAMENTO DE MÍDIAS RECEBIDAS (Áudios, Comprovantes, Figurinhas)
   if (clean.includes('cliente_enviou_audio')) {
@@ -644,10 +709,10 @@ async function gerarRespostaRecepcionista(
       };
     }
 
-    // Catálogo geral de produtos
-    const listaProdutos = produtosVenda.map(p => `• *${p.nome}*: R$ ${formatarReal(p.precoVenda || 0)}`).join('\n');
+    // Catálogo geral de produtos numerado de 1 ao infinito
+    const listaProdutos = produtosVenda.map((p, idx) => `${formatarNumeroItem(idx)} *${p.nome}*: R$ ${formatarReal(p.precoVenda || 0)}`).join('\n');
     return {
-      respostaBot: `Olá, ${clienteNome}! ✨ Temos uma linha de cuidados profissionais para você levar para casa:\n\n${listaProdutos || '• Espuma Higienizadora Especial de Cílios: R$ 45,00'}\n\nVocê pode *retirar aqui no Studio* ou pedir para *entregar no seu endereço por motoboy/correios*! Gostaria de pedir algum? 🛍️`,
+      respostaBot: `Olá, ${clienteNome}! ✨ Temos uma linha de cuidados profissionais para você levar para casa:\n\n${listaProdutos || '1️⃣ Espuma Higienizadora Especial de Cílios: R$ 45,00'}\n\n💡 *Dica:* Para pedir, basta responder com o *número* da opção desejada (ex: *1*, *2*...)!\n\nVocê prefere *retirar aqui no Studio* ou receber por *motoboy/correios*? 🛍️🛵`,
       agendamentoCriado: null
     };
   }
@@ -726,9 +791,9 @@ async function gerarRespostaRecepcionista(
   if (ehAgendamento) {
     // 1. Se a cliente ainda NÃO especificou qual serviço deseja
     if (servicosMencionados.length === 0) {
-      const listaSrv = servicos.map(s => `• *${s.nome}* - R$ ${formatarReal(s.precoTotal)} (Sinal R$ ${formatarReal(s.valorSinal)})`).join('\n');
+      const listaSrv = servicos.map((s, idx) => `${formatarNumeroItem(idx)} *${s.nome}* - R$ ${formatarReal(s.precoTotal)} (Sinal R$ ${formatarReal(s.valorSinal)})`).join('\n');
       return {
-        respostaBot: `Olá, ${clienteNome}! 🌸 Vai ser um prazer enorme cuidar de você no *${db.configuracoes.nomeEmpresa}*!\n\nQual dos nossos procedimentos você gostaria de agendar?\n\n${listaSrv}\n\nE para qual dia e período (manhã ou tarde) fica melhor para você? ✨🗓️`,
+        respostaBot: `Olá, ${clienteNome}! 🌸 Vai ser um prazer enorme cuidar de você no *${db.configuracoes.nomeEmpresa}*!\n\nQual dos nossos procedimentos você gostaria de agendar?\n\n${listaSrv}\n\n💡 *Dica:* Para agilizar, você pode responder apenas digitando o *número* da opção desejada (ex: *1*, *2*...)! ✨🗓️\n\nE para qual dia e período (manhã ou tarde) fica melhor para você? 💕`,
         agendamentoCriado: null
       };
     }
@@ -810,23 +875,23 @@ async function gerarRespostaRecepcionista(
 
   if (ehPerguntaPreco || servicosMencionados.length > 0) {
     if (servicosMencionados.length > 0) {
-      const lista = servicosMencionados.map(s => `• *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
+      const lista = servicosMencionados.map((s, idx) => `${formatarNumeroItem(idx)} *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
       return {
         respostaBot: `Olá, ${clienteNome}! ✨ Seguem os valores dos procedimentos:\n\n${lista}\n\nLembrando que o sinal é abatido no dia do seu atendimento! Qual desses você quer marcar comigo? Tenho horários vagos hoje e nesta semana! 💕`,
         agendamentoCriado: null
       };
     }
 
-    const listaCompleta = servicos.map(s => `• *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
+    const listaCompleta = servicos.map((s, idx) => `${formatarNumeroItem(idx)} *${s.nome}*: R$ ${formatarReal(s.precoTotal)} (Sinal de R$ ${formatarReal(s.valorSinal)})`).join('\n');
     return {
-      respostaBot: `Olá, ${clienteNome}! Seja muito bem-vinda ao *${db.configuracoes.nomeEmpresa}*! ✨\n\nAqui está nossa tabela de serviços e valores:\n\n${listaCompleta}\n\nQual desses você gostaria de fazer? Me diga um dia e horário bom para você! 🗓️`,
+      respostaBot: `Olá, ${clienteNome}! Seja muito bem-vinda ao *${db.configuracoes.nomeEmpresa}*! ✨\n\nAqui está nossa tabela oficial de procedimentos:\n\n${listaCompleta}\n\n💡 *Dica:* Para agendar, você pode responder apenas com o *número* da opção desejada (ex: *1*, *2*...)!\n\nQual deles você gostaria de fazer? Me diga um dia e horário bom para você! 🗓️🌸`,
       agendamentoCriado: null
     };
   }
 
   // 6. SAUDAÇÃO PADRÃO
   return {
-    respostaBot: `Olá, ${clienteNome}! Tudo bem? Sou a Manu, recepcionista virtual do *${db.configuracoes.nomeEmpresa}* 🌸.\n\nComo posso te ajudar hoje?\n• Agendar Procedimentos (Cílios, Sobrancelhas, Limpeza de Pele)\n• Tirar dúvidas de valores e técnicas\n• Comprar produtos para cuidados em casa (com entrega ou retirada! 🛍️)`,
+    respostaBot: `Olá, ${clienteNome}! Tudo bem? Sou a Manu, recepcionista virtual do *${db.configuracoes.nomeEmpresa}* 🌸.\n\nComo posso cuidar de você hoje?\n1️⃣ *Agendar Procedimento* (Cílios, Sobrancelhas, Limpeza de Pele)\n2️⃣ *Consultar Valores e Procedimentos*\n3️⃣ *Comprar Produtos Home-Care* (com entrega ou retirada! 🛍️)\n\n💡 *Dica:* Você pode responder apenas digitando *1*, *2* ou *3*! ✨`,
     agendamentoCriado: null
   };
 }

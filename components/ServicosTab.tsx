@@ -188,7 +188,7 @@ export function ServicosTab({
 
       {/* Grid de Serviços */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {servicos.map((s) => (
+        {servicos.map((s, idx) => (
           <div
             key={s.id}
             className={`bg-white dark:bg-slate-900 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-emerald-400 dark:hover:border-emerald-600 transition-all ${!s.ativo ? 'opacity-60 bg-slate-50/50 dark:bg-slate-900/50' : ''}`}
@@ -214,6 +214,9 @@ export function ServicosTab({
 
               {/* Badges sobre a foto */}
               <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-black text-white bg-slate-950/85 backdrop-blur-md px-2 py-0.5 rounded-lg shadow-sm border border-white/20">
+                  #{idx + 1}
+                </span>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-900 dark:text-white bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-2.5 py-1 rounded-lg shadow-sm">
                   {getIconeCategoria(s.categoria)}
                   <span>{s.categoria}</span>

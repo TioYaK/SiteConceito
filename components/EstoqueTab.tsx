@@ -331,7 +331,7 @@ export function EstoqueTab({
             <p className="text-xs text-slate-400">Tente buscar por outro termo ou cadastre um novo produto acima.</p>
           </div>
         ) : (
-          itensFiltrados.map((item) => {
+          itensFiltrados.map((item, idx) => {
             const emFalta = item.quantidade <= item.minimoAlerta;
             const isVenda = item.tipo === 'venda_balcao';
             const isExpandido = itemExpandidoId === item.id;
@@ -370,6 +370,9 @@ export function EstoqueTab({
 
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-black text-white bg-slate-900 dark:bg-emerald-600 px-1.5 py-0.5 rounded-md">
+                          #{idx + 1}
+                        </span>
                         <h4 className="font-bold text-slate-800 dark:text-white text-sm leading-tight">
                           {item.nome}
                         </h4>

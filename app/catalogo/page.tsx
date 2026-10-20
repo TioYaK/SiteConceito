@@ -450,8 +450,9 @@ export default function CatalogoPublicoPage() {
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-400">Nenhum procedimento encontrado</p>
               </div>
             ) : (
-              servicosFiltrados.map((srv) => {
+              servicosFiltrados.map((srv, index) => {
                 const badge = getBadgeProcedimento(srv.nome);
+                const numeroItem = index + 1;
                 return (
                   <div
                     key={srv.id}
@@ -464,12 +465,18 @@ export default function CatalogoPublicoPage() {
                           alt={srv.nome} 
                           className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
                         />
+                        <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md text-white text-xs font-black px-2.5 py-1 rounded-xl shadow border border-white/20 flex items-center gap-1">
+                          <span>Opção #{numeroItem}</span>
+                        </div>
                       </div>
                     )}
 
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-black text-white bg-slate-900 dark:bg-emerald-600 px-2 py-0.5 rounded-md">
+                            #{numeroItem}
+                          </span>
                           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
                             {srv.categoria}
                           </span>
@@ -502,13 +509,13 @@ export default function CatalogoPublicoPage() {
                       </span>
 
                       <a
-                        href={criarLinkWhatsApp(`Olá Manu! ✨ Vi no catálogo e gostaria de agendar o procedimento *${srv.nome}* (R$ ${srv.precoTotal.toFixed(2).replace('.', ',')}). Quais os próximos horários disponíveis?`)}
+                        href={criarLinkWhatsApp(`Olá Manu! ✨ Vi no catálogo e gostaria de agendar a opção #${numeroItem} - *${srv.nome}* (R$ ${srv.precoTotal.toFixed(2).replace('.', ',')}). Quais os próximos horários disponíveis?`)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-emerald-600/20 cursor-pointer"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Agendar no WhatsApp</span>
+                        <span>Agendar Opção #{numeroItem}</span>
                       </a>
                     </div>
                   </div>
@@ -541,88 +548,97 @@ export default function CatalogoPublicoPage() {
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-400">Nenhum produto encontrado</p>
               </div>
             ) : (
-              produtosFiltrados.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800"
-                >
-                  {item.imagemUrl && (
-                    <div className="relative w-full h-44 sm:h-52 -mt-1 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
-                      <img 
-                        src={item.imagemUrl} 
-                        alt={item.nome} 
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
-                      />
-                    </div>
-                  )}
+              produtosFiltrados.map((item, index) => {
+                const numeroProduto = index + 1;
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3.5 transition-all hover:border-emerald-300 dark:hover:border-emerald-800"
+                  >
+                    {item.imagemUrl && (
+                      <div className="relative w-full h-44 sm:h-52 -mt-1 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        <img 
+                          src={item.imagemUrl} 
+                          alt={item.nome} 
+                          className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" 
+                        />
+                        <div className="absolute top-3 left-3 bg-slate-950/80 backdrop-blur-md text-white text-xs font-black px-2.5 py-1 rounded-xl shadow border border-white/20 flex items-center gap-1">
+                          <span>Opção #{numeroProduto}</span>
+                        </div>
+                      </div>
+                    )}
 
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200/60 dark:border-teal-800/60">
-                          {item.categoria || 'Home-Care'}
-                        </span>
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Em Estoque
-                        </span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-white bg-slate-900 dark:bg-teal-600 px-2 py-0.5 rounded-md">
+                            #{numeroProduto}
+                          </span>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-200/60 dark:border-teal-800/60">
+                            {item.categoria || 'Home-Care'}
+                          </span>
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Em Estoque
+                          </span>
+                        </div>
+
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1">
+                          {item.nome}
+                        </h3>
+
+                        {item.descricao && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            {item.descricao}
+                          </p>
+                        )}
                       </div>
 
-                      <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mt-1">
-                        {item.nome}
-                      </h3>
-
-                      {item.descricao && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                          {item.descricao}
-                        </p>
-                      )}
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 block">
+                          R$ {item.precoVenda?.toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          À vista ou no cartão
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-right flex-shrink-0">
-                      <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 block">
-                        R$ {item.precoVenda?.toFixed(2).replace('.', ',')}
+                    {/* Benefícios e Modo de Uso */}
+                    {(item.beneficios || item.modoUso) && (
+                      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
+                        {item.beneficios && (
+                          <p className="text-slate-700 dark:text-slate-300">
+                            <strong className="text-emerald-600 dark:text-emerald-400">✨ Benefícios: </strong>
+                            {item.beneficios}
+                          </p>
+                        )}
+                        {item.modoUso && (
+                          <p className="text-slate-600 dark:text-slate-400">
+                            <strong className="text-indigo-600 dark:text-indigo-400">🧴 Como usar: </strong>
+                            {item.modoUso}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 text-xs">
+                      <span className="text-[11px] text-slate-400">
+                        📦 Pronta entrega no Studio
                       </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        À vista ou no cartão
-                      </span>
+
+                      <a
+                        href={criarLinkWhatsApp(`Olá Manu! 🌸 Vi o produto #${numeroProduto} (*${item.nome}*) no catálogo (R$ ${item.precoVenda?.toFixed(2).replace('.', ',')}) e quero pedir! Como faço para receber por motoboy ou retirar no local?`)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>Pedir Opção #{numeroProduto}</span>
+                      </a>
                     </div>
                   </div>
-
-                  {/* Benefícios e Modo de Uso */}
-                  {(item.beneficios || item.modoUso) && (
-                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
-                      {item.beneficios && (
-                        <p className="text-slate-700 dark:text-slate-300">
-                          <strong className="text-emerald-600 dark:text-emerald-400">✨ Benefícios: </strong>
-                          {item.beneficios}
-                        </p>
-                      )}
-                      {item.modoUso && (
-                        <p className="text-slate-600 dark:text-slate-400">
-                          <strong className="text-indigo-600 dark:text-indigo-400">🧴 Como usar: </strong>
-                          {item.modoUso}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2 text-xs">
-                    <span className="text-[11px] text-slate-400">
-                      📦 Pronta entrega no Studio
-                    </span>
-
-                    <a
-                      href={criarLinkWhatsApp(`Olá Manu! 🌸 Vi o produto *${item.nome}* no catálogo (R$ ${item.precoVenda?.toFixed(2).replace('.', ',')}) e quero comprar! Como faço para receber por motoboy ou retirar no local?`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>Pedir no WhatsApp</span>
-                    </a>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
