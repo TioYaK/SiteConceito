@@ -826,7 +826,7 @@ export function RecepcionistaTab({
           </div>
 
           <a
-            href="https://www.mercadopago.com.br/developers/panel/credentials"
+            href="https://www.mercadopago.com.br/developers/panel/app"
             target="_blank"
             rel="noopener noreferrer"
             className="self-start sm:self-center px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 text-sky-700 dark:text-sky-300 text-xs font-bold hover:bg-sky-50 dark:hover:bg-slate-700 transition flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
@@ -858,7 +858,7 @@ export function RecepcionistaTab({
             <span>💡 Como pegar a chave do Mercado Pago em 3 minutos:</span>
           </p>
           <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed">
-            <li>Clique no botão azul acima <strong>"Obter Token no Mercado Pago"</strong> (ou acesse <code className="bg-sky-100 dark:bg-sky-900 px-1 py-0.5 rounded text-sky-800 dark:text-sky-200">mercadopago.com.br/developers</code>).</li>
+            <li>Clique no botão azul acima <strong>"Obter Token no Mercado Pago"</strong> (ou acesse <code className="bg-sky-100 dark:bg-sky-900 px-1 py-0.5 rounded text-sky-800 dark:text-sky-200">mercadopago.com.br/developers/panel/app</code>).</li>
             <li>Faça login na sua conta do Mercado Pago (onde você deseja receber os pagamentos).</li>
             <li>Vá em <strong>Suas integrações</strong> e abra sua aplicação (ou crie uma chamada <em>Studio Bruna Meireles</em>).</li>
             <li>No menu lateral, clique em <strong>Credenciais de produção</strong>.</li>
