@@ -593,7 +593,7 @@ async function processarRetornoIA(
       valorPix
     );
 
-    if (!respostaFinal.toLowerCase().includes('mensagem abaixo')) {
+    if (!respostaFinal.toLowerCase().includes('mensagem abaixo') && !respostaFinal.toLowerCase().includes('mensagem seguinte')) {
       const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
       respostaFinal += `\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
     }
