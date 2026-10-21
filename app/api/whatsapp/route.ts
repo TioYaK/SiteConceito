@@ -378,7 +378,8 @@ async function processarRetornoIA(
   produtos: ItemEstoque[],
   frete: any,
   hojeStr: string,
-  isLid?: boolean
+  isLid?: boolean,
+  mensagemOriginal?: string
 ): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null }> {
   let agendamentoCriado: Agendamento | null = null;
   let pedidoCriado: Pedido | null = null;
@@ -560,6 +561,44 @@ async function processarRetornoIA(
     }
   }
 
+  // Se ainda não temos pixParaEnviar, mas a resposta promete PIX ("mensagem abaixo", "copia e cola", "chave pix")
+  // OU a cliente pediu explicitamente ("manda o pix", "copie e cole", etc.):
+  const textoLimpo = (respostaFinal + ' ' + (mensagemOriginal || '')).toLowerCase();
+  const pediuPix = 
+    textoLimpo.includes('mensagem abaixo') ||
+    textoLimpo.includes('copia e cola') ||
+    textoLimpo.includes('copie e cole') ||
+    textoLimpo.includes('chave pix') ||
+    /\b(pix|chave|copie|copia|pagar|sinal)\b/i.test(mensagemOriginal || '');
+
+  if (!pixParaEnviar && pediuPix) {
+    // 1. Procura se há um agendamento pendente da cliente aguardando sinal
+    const agendamentoPendente = (db.agendamentos || []).find(a =>
+      a.status === 'aguardando_sinal' &&
+      (
+        (telefoneRealIdentificado && a.clienteTelefone.replace(/\D/g, '') === telefoneRealIdentificado) ||
+        (clienteTelefone && a.clienteTelefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
+        (nomeValido && a.clienteNome.toLowerCase() === nomeValido.toLowerCase()) ||
+        (clienteNome && a.clienteNome.toLowerCase() === clienteNome.toLowerCase())
+      )
+    );
+
+    const chavePixOficial = db.configuracoes.chavePix || '67996203089';
+    const valorPix = agendamentoPendente ? agendamentoPendente.valorSinal : (db.configuracoes.sinalPadrao || 30.0);
+
+    pixParaEnviar = agendamentoPendente?.pixCodigo || gerarPixCopiaECola(
+      chavePixOficial,
+      db.configuracoes.nomeEmpresa,
+      db.configuracoes.endereco?.cidade || 'Dourados',
+      valorPix
+    );
+
+    if (!respostaFinal.toLowerCase().includes('mensagem abaixo')) {
+      const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
+      respostaFinal += `\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
+    }
+  }
+
   return {
     respostaBot: respostaFinal.trim(),
     pixCopiaECola: pixParaEnviar || agendamentoCriado?.pixCodigo || pedidoCriado?.pixCodigo || null,
@@ -656,7 +695,8 @@ async function gerarRespostaGroq(
         produtos,
         frete,
         hojeStr,
-        isLid
+        isLid,
+        mensagem
       );
     } catch (err) {
       console.warn(`Tentativa Groq com modelo ${m} falhou:`, err);
@@ -746,7 +786,8 @@ async function gerarRespostaGemini(
         produtos,
         frete,
         hojeStr,
-        isLid
+        isLid,
+        mensagem
       );
     } catch (error) {
       console.warn(`Tentativa com modelo ${m} falhou:`, error);
@@ -1234,6 +1275,33 @@ async function gerarRespostaRecepcionista(
       respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`,
       pixCopiaECola: pixCode,
       agendamentoCriado: novoAgendamento
+    };
+  }
+
+  // 4.5. PEDIDO EXPLÍCITO DE CHAVE PIX OU PIX COPIA E COLA
+  const ehPedidoPix = clean.includes('pix') || clean.includes('chave') || clean.includes('copia') || clean.includes('copie');
+  if (ehPedidoPix) {
+    const chavePixOficial = db.configuracoes.chavePix || '67996203089';
+    const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
+    const agendamentoPendente = (db.agendamentos || []).find(a =>
+      a.status === 'aguardando_sinal' &&
+      (
+        (clienteTelefone && a.clienteTelefone.replace(/\D/g, '') === clienteTelefone.replace(/\D/g, '')) ||
+        a.clienteNome.toLowerCase() === clienteNome.toLowerCase()
+      )
+    );
+    const valorPix = agendamentoPendente ? agendamentoPendente.valorSinal : (db.configuracoes.sinalPadrao || 30.0);
+    const pixCode = agendamentoPendente?.pixCodigo || gerarPixCopiaECola(
+      chavePixOficial,
+      db.configuracoes.nomeEmpresa,
+      db.configuracoes.endereco?.cidade || 'Dourados',
+      valorPix
+    );
+
+    return {
+      respostaBot: `Oi, ${clienteNome}! ✨ Aqui está a chave oficial do Studio Bruna Meireles:\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`,
+      pixCopiaECola: pixCode,
+      agendamentoCriado: null
     };
   }
 
