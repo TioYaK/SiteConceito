@@ -313,6 +313,16 @@ async function iniciarWhatsApp() {
               console.log(`💬 [Manu IA Respondeu para ${nomeCliente} (${data.motorUtilizado || 'IA'})]:`);
               console.log(`   ${data.respostaBot.split('\n')[0]}...`);
 
+              // Se houver código PIX Copia e Cola, envia em uma mensagem SEPARADA e exclusiva
+              // para a cliente copiar com 1 único toque no celular sem copiar texto misturado!
+              const pixCode = data.pixCopiaECola || data.agendamentoCriado?.pixCodigo || data.pedidoCriado?.pixCodigo;
+              if (pixCode && typeof pixCode === 'string' && pixCode.startsWith('000201')) {
+                await new Promise(resolve => setTimeout(resolve, 900)); // pausa natural de envio
+                await sock.sendMessage(remoteJid, { text: pixCode });
+                console.log(`🔑 [PIX Copia e Cola Enviado em Mensagem Separada para ${nomeCliente}]:`);
+                console.log(`   ${pixCode}`);
+              }
+
               if (data.agendamentoCriado) {
                 console.log(`   🗓️ Agendamento registrado: ${data.agendamentoCriado.servicoNome} às ${data.agendamentoCriado.horario}`);
               }

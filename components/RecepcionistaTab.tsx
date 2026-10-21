@@ -390,15 +390,26 @@ export function RecepcionistaTab({
 
       const data = await res.json();
       if (data.sucesso && data.respostaBot) {
-        setMensagens(prev => [
-          ...prev,
+        const msgsNovas: MensagemChat[] = [
           {
             id: `msg-bot-${Date.now()}`,
             autor: 'recepcionista',
             texto: data.respostaBot,
             horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
           }
-        ]);
+        ];
+
+        const pixCode = data.pixCopiaECola || data.agendamentoCriado?.pixCodigo || data.pedidoCriado?.pixCodigo;
+        if (pixCode && typeof pixCode === 'string' && pixCode.startsWith('000201')) {
+          msgsNovas.push({
+            id: `msg-bot-pix-${Date.now() + 1}`,
+            autor: 'recepcionista',
+            texto: pixCode,
+            horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          });
+        }
+
+        setMensagens(prev => [...prev, ...msgsNovas]);
 
         if (onMensagemSimuladaEnviada) {
           onMensagemSimuladaEnviada();

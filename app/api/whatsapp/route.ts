@@ -70,6 +70,22 @@ function gerarPixCopiaECola(
   return `${payloadSemCrc}${crcHex}`;
 }
 
+function detectarTipoChavePix(chave: string, tipoCadastrado?: string): string {
+  const c = (chave || '').trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c)) {
+    return 'Chave Aleatória';
+  }
+  if (/@/.test(c)) return 'E-mail';
+  const digitos = c.replace(/\D/g, '');
+  if (digitos.length === 14) return 'CNPJ';
+  if (digitos.length === 11 && (tipoCadastrado?.toLowerCase().includes('cpf') || !c.startsWith('+55'))) {
+    if (tipoCadastrado?.toLowerCase().includes('cpf')) return 'CPF';
+  }
+  if (digitos.length >= 10 && digitos.length <= 13) return 'Telefone';
+  if (tipoCadastrado?.toLowerCase() === 'aleatoria' || tipoCadastrado?.toLowerCase() === 'aleatória') return 'Chave Aleatória';
+  return tipoCadastrado || 'Chave PIX';
+}
+
 function montarContextoEInstrucaoManu(
   db: AppData,
   clienteNome: string,
@@ -320,7 +336,9 @@ REGRAS DE ENTREGA E FRETE:
 - Sedex / PAC dos Correios para outras cidades/estados.
 
 CHAVE PIX DO STUDIO:
-- Chave: ${db.configuracoes.chavePix} (${db.configuracoes.tipoChavePix})
+- Chave: ${db.configuracoes.chavePix} (${detectarTipoChavePix(db.configuracoes.chavePix, db.configuracoes.tipoChavePix)})
+- REGRA CRÍTICA PARA ENVIO DE PIX: NUNCA escreva o código longo do PIX Copia e Cola (000201...) dentro de "respostaWhatsApp"! O sistema enviará o código do PIX automaticamente em uma mensagem separada exclusiva logo em seguida para que a cliente possa copiar com um único toque sem copiar texto desnecessário.
+- Na sua respostaWhatsApp ao confirmar o agendamento/pedido, informe a Chave PIX e avise com carinho: "👇 O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!"
 
 FORMATO DE RESPOSTA OBRIGATÓRIO (JSON puro):
 {
@@ -361,9 +379,10 @@ async function processarRetornoIA(
   frete: any,
   hojeStr: string,
   isLid?: boolean
-): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null }> {
   let agendamentoCriado: Agendamento | null = null;
   let pedidoCriado: Pedido | null = null;
+  let pixParaEnviar: string | null = null;
   let respostaFinal = parsed.respostaWhatsApp || "";
 
   // 1. Tratamento inteligente de Nome e Telefone reais extraídos pela IA
@@ -394,6 +413,9 @@ async function processarRetornoIA(
       srv.valorSinal
     );
 
+    pixParaEnviar = pixCode;
+    const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
+
     agendamentoCriado = {
       id: `ag-${Date.now()}`,
       clienteNome: nomeValido,
@@ -415,8 +437,14 @@ async function processarRetornoIA(
     db.agendamentos.push(agendamentoCriado);
     await saveDb(db);
 
-    if (!respostaFinal.includes(pixCode)) {
-      respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+    // Remove qualquer ocorrência do código bruto 000201... de respostaFinal se o modelo tiver gerado no texto
+    respostaFinal = respostaFinal.replace(/000201[0-9a-zA-Z\.\-\*]{20,}/g, '').trim();
+    respostaFinal = respostaFinal.replace(/📋\s*\*?PIX Copia e Cola:\*?\s*`?`?/gi, '').trim();
+
+    if (!respostaFinal.includes(chavePixOficial)) {
+      respostaFinal += `\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
+    } else if (!respostaFinal.toLowerCase().includes('mensagem abaixo')) {
+      respostaFinal += `\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
     }
   }
 
@@ -436,6 +464,9 @@ async function processarRetornoIA(
       db.configuracoes.endereco?.cidade || 'Dourados',
       valorTotal
     );
+
+    pixParaEnviar = pixCode;
+    const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
 
     if (!db.pedidos) db.pedidos = [];
     pedidoCriado = {
@@ -459,8 +490,13 @@ async function processarRetornoIA(
     db.pedidos.unshift(pedidoCriado);
     await saveDb(db);
 
-    if (!respostaFinal.includes(pixCode)) {
-      respostaFinal += `\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\``;
+    respostaFinal = respostaFinal.replace(/000201[0-9a-zA-Z\.\-\*]{20,}/g, '').trim();
+    respostaFinal = respostaFinal.replace(/📋\s*\*?PIX Copia e Cola:\*?\s*`?`?/gi, '').trim();
+
+    if (!respostaFinal.includes(chavePixOficial)) {
+      respostaFinal += `\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
+    } else if (!respostaFinal.toLowerCase().includes('mensagem abaixo')) {
+      respostaFinal += `\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
     }
   }
 
@@ -513,8 +549,20 @@ async function processarRetornoIA(
     }
   }
 
+  // Se por qualquer motivo a IA incluiu o código 000201 no texto de respostaFinal:
+  const matchPix = respostaFinal.match(/000201[0-9a-zA-Z\.\-\*]{20,}/);
+  if (matchPix) {
+    if (!pixParaEnviar) pixParaEnviar = matchPix[0];
+    respostaFinal = respostaFinal.replace(matchPix[0], '').trim();
+    respostaFinal = respostaFinal.replace(/📋\s*\*?PIX Copia e Cola:\*?\s*`?`?/gi, '').trim();
+    if (!respostaFinal.toLowerCase().includes('mensagem abaixo')) {
+      respostaFinal += `\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`;
+    }
+  }
+
   return {
-    respostaBot: respostaFinal,
+    respostaBot: respostaFinal.trim(),
+    pixCopiaECola: pixParaEnviar || agendamentoCriado?.pixCodigo || pedidoCriado?.pixCodigo || null,
     agendamentoCriado,
     pedidoCriado
   };
@@ -532,7 +580,7 @@ async function gerarRespostaGroq(
   clienteTelefone: string = '5511999998888',
   historico: Array<{ role: 'user' | 'model'; text: string }> = [],
   isLid?: boolean
-): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null } | null> {
   const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome, clienteTelefone, isLid);
   const modelosParaTentar = Array.from(new Set([
     modeloNome,
@@ -627,7 +675,7 @@ async function gerarRespostaGemini(
   clienteTelefone: string = '5511999998888',
   historico: Array<{ role: 'user' | 'model'; text: string }> = [],
   isLid?: boolean
-): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null> {
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null } | null> {
   const { promptSistema, servicos, produtos, frete, hojeStr } = montarContextoEInstrucaoManu(db, clienteNome, clienteTelefone, isLid);
   const genAI = new GoogleGenerativeAI(apiKey);
   const modelosParaTentar = Array.from(new Set([
@@ -726,7 +774,7 @@ async function gerarRespostaRecepcionista(
   clienteTelefone: string = "5511999998888",
   historico: Array<{ role: 'user' | 'model'; text: string }> = [],
   isLid?: boolean
-): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null }> {
+): Promise<{ respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null }> {
   const clean = normalizar(mensagem);
   const servicos = db.servicos.filter(s => s.ativo);
   const produtosVenda = (db.estoque || []).filter(e => e.tipo === 'venda_balcao' && e.quantidade > 0);
@@ -1181,8 +1229,10 @@ async function gerarRespostaRecepcionista(
     }
     await saveDb(db);
 
+    const tipoChave = detectarTipoChavePix(chavePixOficial, db.configuracoes.tipoChavePix);
     return {
-      respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (${db.configuracoes.tipoChavePix || 'Telefone'}):* ${chavePixOficial}\n📋 *PIX Copia e Cola:*\n\`${pixCode}\`\n\nAssim que fizer a transferência, nossa confirmação chega aqui em instantes! Te esperamos com muito carinho! 💖`,
+      respostaBot: `Perfeito, ${clienteNome}! Reservei seu horário provisório para *${servicoEncontrado.nome}* ${diaTexto} às *${horarioEscolhido}*. 🗓️✨\n\nPara garantir a sua vaga na agenda e o tempo exclusivo da profissional, solicitamos o pagamento do sinal de *R$ ${formatarReal(servicoEncontrado.valorSinal)}* (esse valor será abatido do total na sua comanda).\n\n🔑 *Chave PIX (${tipoChave}):*\n\`${chavePixOficial}\`\n\n👇 *O código PIX Copia e Cola segue na mensagem abaixo para você copiar com 1 toque no app do seu banco!*`,
+      pixCopiaECola: pixCode,
       agendamentoCriado: novoAgendamento
     };
   }
@@ -1404,7 +1454,7 @@ export async function POST(request: Request) {
         remetenteNome = clienteCadastrado?.nome || body.clienteNome || "Cliente";
       }
 
-      let resultado: { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null } | null = null;
+      let resultado: { respostaBot: string; agendamentoCriado: Agendamento | null; pedidoCriado?: Pedido | null; pixCopiaECola?: string | null } | null = null;
       const groqKey = process.env.GROQ_API_KEY || db.configuracoes.groqApiKey;
       const geminiKey = process.env.GEMINI_API_KEY || db.configuracoes.geminiApiKey;
       let motorUtilizado = 'local';
@@ -1465,11 +1515,14 @@ export async function POST(request: Request) {
         );
       }
 
+      const pixFinal = resultado?.pixCopiaECola || resultado?.agendamentoCriado?.pixCodigo || resultado?.pedidoCriado?.pixCodigo || null;
+
       return NextResponse.json({
         sucesso: true,
-        respostaBot: resultado.respostaBot,
-        agendamentoCriado: resultado.agendamentoCriado,
-        pedidoCriado: resultado.pedidoCriado,
+        respostaBot: resultado?.respostaBot || "",
+        pixCopiaECola: pixFinal,
+        agendamentoCriado: resultado?.agendamentoCriado || null,
+        pedidoCriado: resultado?.pedidoCriado || null,
         motorUtilizado
       });
     }
